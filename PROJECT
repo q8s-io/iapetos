@@ -1,0 +1,7 @@
+domain: iapetos.foundary-cloud.io
+repo: stateful-pod
+resources:
+- group: bdg
+  kind: StatefulPod
+  version: v1
+version: "2"

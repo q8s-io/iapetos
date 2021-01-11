@@ -1,0 +1,24 @@
+# permissions for end users to edit statefulpods.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: statefulpod-editor-role
+rules:
+- apiGroups:
+  - bdg.iapetos.foundary-cloud.io
+  resources:
+  - statefulpods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - bdg.iapetos.foundary-cloud.io
+  resources:
+  - statefulpods/status
+  verbs:
+  - get
