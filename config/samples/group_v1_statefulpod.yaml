@@ -1,0 +1,7 @@
+apiVersion: group.iapetos.foundary-cloud.io/v1
+kind: StatefulPod
+metadata:
+  name: statefulpod-sample
+spec:
+  # Add fields here
+  foo: bar

@@ -5,7 +5,7 @@ metadata:
   name: statefulpod-editor-role
 rules:
 - apiGroups:
-  - bdg.iapetos.foundary-cloud.io
+  - iapetos.foundary-cloud.io.iapetos.foundary-cloud.io
   resources:
   - statefulpods
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - bdg.iapetos.foundary-cloud.io
+  - iapetos.foundary-cloud.io.iapetos.foundary-cloud.io
   resources:
   - statefulpods/status
   verbs:

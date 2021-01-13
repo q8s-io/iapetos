@@ -26,8 +26,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	bdgv1 "stateful-pod/api/v1"
-	"stateful-pod/controllers"
+	iapetosfoundarycloudiov1 "iapetos/api/v1"
+	"iapetos/controllers"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -39,7 +39,7 @@ var (
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
-	_ = bdgv1.AddToScheme(scheme)
+	_ = iapetosfoundarycloudiov1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -59,7 +59,7 @@ func main() {
 		MetricsBindAddress: metricsAddr,
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "9fd6f65f.iapetos.foundary-cloud.io",
+		LeaderElectionID:   "3118b9d6.iapetos.foundary-cloud.io",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

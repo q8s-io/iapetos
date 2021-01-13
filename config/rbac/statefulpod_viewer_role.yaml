@@ -5,7 +5,7 @@ metadata:
   name: statefulpod-viewer-role
 rules:
 - apiGroups:
-  - bdg.iapetos.foundary-cloud.io
+  - iapetos.foundary-cloud.io.iapetos.foundary-cloud.io
   resources:
   - statefulpods
   verbs:
@@ -13,7 +13,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - bdg.iapetos.foundary-cloud.io
+  - iapetos.foundary-cloud.io.iapetos.foundary-cloud.io
   resources:
   - statefulpods/status
   verbs:

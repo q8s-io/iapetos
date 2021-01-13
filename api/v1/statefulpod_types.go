@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,8 +29,9 @@ type StatefulPodSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of StatefulPod. Edit StatefulPod_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	Size *int32 `json:"size"`
+	PodTemplate corev1.PodSpec `json:"podTemplate"`
 }
 
 // StatefulPodStatus defines the observed state of StatefulPod

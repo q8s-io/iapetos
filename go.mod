@@ -1,4 +1,4 @@
-module stateful-pod
+module iapetos
 
 go 1.13
 
