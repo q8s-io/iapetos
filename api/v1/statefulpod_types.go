@@ -30,7 +30,7 @@ type StatefulPodSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// +kubebuilder:validation:Minimum=1
-	Size *int32 `json:"size"`
+	Size        *int32         `json:"size"`
 	PodTemplate corev1.PodSpec `json:"podTemplate"`
 }
 
@@ -42,10 +42,10 @@ type StatefulPodStatus struct {
 }
 
 type PodStatus struct {
-	PodName string `json:"podName"`
-	Status corev1.PodPhase  `json:"status"`
-	Index *int32 	`json:"index"`
-	NodeName string	 `json:"nodeName"`
+	PodName  string          `json:"podName"`
+	Status   corev1.PodPhase `json:"status"`
+	Index    *int32          `json:"index"`
+	NodeName string          `json:"nodeName"`
 }
 
 // +kubebuilder:object:root=true
