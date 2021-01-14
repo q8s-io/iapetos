@@ -18,12 +18,13 @@ package controllers
 
 import (
 	"context"
-	"sort"
+	"fmt"
 	"strconv"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -49,21 +50,23 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 		log.Error(err, "unable to fetch statefulPod")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	var pods corev1.PodList
-	if err := r.List(ctx, &pods, client.InNamespace(req.Namespace), client.MatchingLabels{statefulpodv1.Label: statefulPod.Name}); err != nil {
-		log.Error(err, "unable to list child pods")
-		return ctrl.Result{}, err
+	//创建pod
+	if len(statefulPod.Status.PodStatusMes)==0{
+		err:=r.createPod(ctx,&statefulPod,0,int(*statefulPod.Spec.Size))
+		if err!=nil{
+			return ctrl.Result{}, err
+		}
 	}
-	sortPort(pods.Items)
-	err,exit:=r.ContrlPod(ctx,&statefulPod,pods.Items)
-	if err!=nil{
-		return ctrl.Result{}, err
-	}else if exit{
-		return ctrl.Result{},nil
-	}
-	err = r.CreateByReplicas(ctx, &statefulPod, pods.Items)
-	if err != nil {
-		return ctrl.Result{}, err
+	if int(*statefulPod.Spec.Size) > len(statefulPod.Status.PodStatusMes){
+		err:=r.expansion(ctx,&statefulPod)
+		if err!=nil{
+			return ctrl.Result{}, err
+		}
+	}else if int(*statefulPod.Spec.Size) < len(statefulPod.Status.PodStatusMes){
+		err:=r.shrink(ctx,&statefulPod)
+		if err!=nil{
+			return ctrl.Result{}, err
+		}
 	}
 	return ctrl.Result{}, nil
 }
@@ -75,52 +78,85 @@ func (r *StatefulPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-//维护 statefulpod 下的pod
-func (r *StatefulPodReconciler) ContrlPod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, pods []corev1.Pod)(error,bool) {
-	for i, v := range pods {
-		index, _ := strconv.Atoi(v.ObjectMeta.Annotations["index"])
-		if index != i {
-			name := statefulPod.ObjectMeta.Name + strconv.Itoa(i)
-			pod := statefulPod.CreatePod(name)
-			pod.ObjectMeta.Annotations = map[string]string{
-				"index": strconv.Itoa(i),
-			}
-			if err := r.Create(ctx, pod); err != nil {
-				return err,true
-			}
-			return nil,true
+func (r *StatefulPodReconciler)createPod(ctx context.Context,statefulPod *statefulpodv1.StatefulPod,leftIndex,rightIndex int)error{
+	next:=make(chan struct{})
+	defer close(next)
+	for i:=leftIndex;i<rightIndex;i++{
+		name:=statefulPod.Name+strconv.Itoa(i)
+		pod:=statefulPod.CreatePod(name)
+		pod.Annotations= map[string]string{
+			"index":strconv.Itoa(i),
 		}
-	}
-	return nil,false
-}
-
-//根据replicas 创建pod
-func (r *StatefulPodReconciler) CreateByReplicas(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, pods []corev1.Pod) error {
-	if len(pods) < int(*statefulPod.Spec.Size) {
-		for i := len(pods); i < int(*statefulPod.Spec.Size); i++ {
-			name := statefulPod.ObjectMeta.Name + strconv.Itoa(i)
-			pod := statefulPod.CreatePod(name)
-			pod.ObjectMeta.Annotations = map[string]string{
-				"index": strconv.Itoa(i),
-			}
-			if err := r.Create(ctx, pod); err != nil {
-				return err
-			}
+		fmt.Println("-----------",pod.Name)
+		if err:=r.Create(ctx,pod);err!=nil{
+			fmt.Println("create pod err: ",err.Error())
+			return err
 		}
-	} else if len(pods) > int(*statefulPod.Spec.Size) {
-		for i := len(pods); i > int(*statefulPod.Spec.Size); i-- {
-			if err := r.Delete(ctx, &(pods[i-1])); err != nil {
-				return err
+		go func() {
+			for {
+				_=r.Get(ctx,types.NamespacedName{
+					Namespace: pod.Namespace,
+					Name:      pod.Name,
+				},pod)
+				if statefulPod.IsRunning(pod) {
+					next <- struct{}{}
+					return
+				}
 			}
+		}()
+		<-next
+		index:=int32(i)
+		statefulPod.Status.PodStatusMes=append(statefulPod.Status.PodStatusMes, statefulpodv1.PodStatus{
+			PodName:  pod.Name,
+			Status:   corev1.PodRunning,
+			Index:    &index,
+			NodeName: pod.Spec.NodeName,
+		})
+		if err:=r.Update(ctx,statefulPod);err!=nil{
+			return err
 		}
 	}
 	return nil
 }
 
-func sortPort(pods []corev1.Pod) {
-	sort.Slice(pods, func(i, j int) bool {
-		v1, _ := strconv.Atoi(pods[i].Annotations["index"])
-		v2, _ := strconv.Atoi(pods[j].Annotations["index"])
-		return v1 < v2
-	})
+//扩容
+func (r *StatefulPodReconciler)expansion(ctx context.Context,statefulPod *statefulpodv1.StatefulPod)error{
+	return r.createPod(ctx,statefulPod,len(statefulPod.Status.PodStatusMes),int(*statefulPod.Spec.Size))
 }
+
+//缩容
+func (r *StatefulPodReconciler)shrink(ctx context.Context,statefulPod *statefulpodv1.StatefulPod)error{
+	next:=make(chan struct{})
+	defer close(next)
+	for i:=len(statefulPod.Status.PodStatusMes);i>int(*statefulPod.Spec.Size);i--{
+		var pod corev1.Pod
+		if err:=r.Get(ctx,types.NamespacedName{
+			Namespace: statefulPod.Namespace,
+			Name:      statefulPod.Status.PodStatusMes[i-1].PodName,
+		},&pod);err!=nil{
+			return err
+		}
+		if err:=r.Delete(ctx,&pod);err!=nil{
+			return err
+		}
+		go func() {
+			for  {
+				if err:=r.Get(ctx,types.NamespacedName{
+					Namespace: pod.Namespace,
+					Name: pod.Name,
+				},&pod);err!=nil{
+					next<- struct{}{}
+					return
+				}
+			}
+		}()
+		<-next
+		statefulPod.Status.PodStatusMes=statefulPod.Status.PodStatusMes[:len(statefulPod.Status.PodStatusMes)-1]
+		if err:=r.Update(ctx,statefulPod);err!=nil{
+			return err
+		}
+	}
+	return nil
+}
+
+

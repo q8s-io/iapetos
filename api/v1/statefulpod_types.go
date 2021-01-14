@@ -38,6 +38,14 @@ type StatefulPodSpec struct {
 type StatefulPodStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	PodStatusMes []PodStatus `json:"podStatus"`
+}
+
+type PodStatus struct {
+	PodName string `json:"podName"`
+	Status corev1.PodPhase  `json:"status"`
+	Index *int32 	`json:"index"`
+	NodeName string	 `json:"nodeName"`
 }
 
 // +kubebuilder:object:root=true

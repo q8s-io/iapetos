@@ -19,12 +19,16 @@ func (s StatefulPodPredicate) Create(e event.CreateEvent) bool {
 }
 
 func (s StatefulPodPredicate) Delete(e event.DeleteEvent) bool {
+	_, ok := e.Object.(*corev1.Pod)
+	if ok {
+		return false
+	}
 	return true
 }
 
 func (s StatefulPodPredicate) Update(e event.UpdateEvent) bool {
 	if _, ok := e.ObjectOld.(*corev1.Pod); ok {
-		//log.Println("pod edit")
+
 	}
 	if oldObj, ok := e.ObjectOld.(*statefulpodv1.StatefulPod); ok {
 		if newObj,ok:=e.ObjectNew.(*statefulpodv1.StatefulPod);ok{
