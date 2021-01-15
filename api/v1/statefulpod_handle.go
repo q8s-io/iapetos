@@ -22,7 +22,7 @@ func (handle *StatefulPod) CreatePod(podName string) *corev1.Pod {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
 			Namespace: handle.Namespace,
-			Labels:    map[string]string{Label: handle.Name},
+			//Labels:    map[string]string{Label: handle.Name},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(handle, schema.GroupVersionKind{
 					Group:   GroupVersion.Group,

@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	statefulpodv1 "iapetos/api/v1"
 )
@@ -55,14 +56,14 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 	}
 	//初始化statefulpod 创建pod
 	if len(statefulPod.Status.PodStatusMes) == 0 {
-		r.watchs=make(chan struct{})
-		r.deleteEnd=make(chan struct{})
+		/*r.watchs=make(chan struct{})
+		r.deleteEnd=make(chan struct{})*/
 		err := r.createPod(ctx, &statefulPod, 0, int(*statefulPod.Spec.Size))
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		go r.maintainPodCopies(ctx, &statefulPod)
-		return ctrl.Result{}, nil
+		//return ctrl.Result{}, nil
 	}
 	if int(*statefulPod.Spec.Size) > len(statefulPod.Status.PodStatusMes) { //扩容
 		err := r.expansion(ctx, &statefulPod)
@@ -83,7 +84,7 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 
 func (r *StatefulPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&statefulpodv1.StatefulPod{}).
+		For(&statefulpodv1.StatefulPod{}).Watches(&source.Kind{Type: &corev1.Pod{}},&StatefulPodEvent{}).
 		WithEventFilter(StatefulPodPredicate{}).
 		Complete(r)
 }
@@ -97,6 +98,7 @@ func (r *StatefulPodReconciler) createPod(ctx context.Context, statefulPod *stat
 		pod := statefulPod.CreatePod(name)
 		pod.Annotations = map[string]string{
 			"index": strconv.Itoa(i),
+			"parent":statefulpodv1.GroupVersion.String()+statefulpodv1.Kind,
 		}
 		fmt.Println("-----------", pod.Name)
 		if err := r.Create(ctx, pod); err != nil {
@@ -117,6 +119,7 @@ func (r *StatefulPodReconciler) createPod(ctx context.Context, statefulPod *stat
 		}()
 		<-next
 		index := int32(i)
+		fmt.Println(pod.Name,"--------------",pod.Spec.NodeName)
 		statefulPod.Status.PodStatusMes = append(statefulPod.Status.PodStatusMes, statefulpodv1.PodStatus{
 			PodName:  pod.Name,
 			Status:   corev1.PodRunning,
@@ -132,9 +135,16 @@ func (r *StatefulPodReconciler) createPod(ctx context.Context, statefulPod *stat
 
 //删除pod
 func (r *StatefulPodReconciler) deletePod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, leftIndex, rightIndex int) error {
-	r.watchs<- struct{}{}
 	r.Lock()
 	defer r.Unlock()
+	if statefulPod.Annotations==nil{
+		statefulPod.Annotations= map[string]string{
+			"delete":"true",
+		}
+	}else {
+		statefulPod.Annotations["delete"]="true"
+	}
+	_=r.Update(ctx,statefulPod)
 	next := make(chan struct{})
 	defer close(next)
 	for i := leftIndex; i > rightIndex; i-- {
@@ -165,7 +175,8 @@ func (r *StatefulPodReconciler) deletePod(ctx context.Context, statefulPod *stat
 			return err
 		}
 	}
-	r.deleteEnd<- struct{}{}
+	statefulPod.Annotations["delete"]="false"
+	_=r.Update(ctx,statefulPod)
 	return nil
 
 }
@@ -182,11 +193,7 @@ func (r *StatefulPodReconciler) shrink(ctx context.Context, statefulPod *statefu
 
 //维护pod
 func (r *StatefulPodReconciler) maintainPodCopies(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) {
-	for {
-		select {
-		case <-r.watchs:
-			<-r.deleteEnd
-		default:
+	/*for {
 			var newStatefulPod statefulpodv1.StatefulPod
 			if err := r.Get(ctx, types.NamespacedName{
 				Namespace: statefulPod.Namespace,
@@ -194,15 +201,22 @@ func (r *StatefulPodReconciler) maintainPodCopies(ctx context.Context, statefulP
 			}, &newStatefulPod); err != nil {
 				return
 			}
+			if newStatefulPod.Annotations["delete"]=="true"{
+				continue
+			}*/
 			next := make(chan struct{})
 			defer close(next)
-			for i, v := range newStatefulPod.Status.PodStatusMes {
+			for i, v := range statefulPod.Status.PodStatusMes {
 				var pod corev1.Pod
 				if err := r.Get(ctx, types.NamespacedName{
-					Namespace: newStatefulPod.Namespace,
+					Namespace: statefulPod.Namespace,
 					Name:      v.PodName,
 				}, &pod); err != nil{
-					pod = *newStatefulPod.CreatePod(v.PodName)
+					pod = *statefulPod.CreatePod(v.PodName)
+					pod.Annotations = map[string]string{
+						"index": strconv.Itoa(i),
+						"parent":statefulpodv1.GroupVersion.String()+statefulpodv1.Kind,
+					}
 					if err2 := r.Create(ctx, &pod); err2 != nil {
 						return
 					}
@@ -212,29 +226,31 @@ func (r *StatefulPodReconciler) maintainPodCopies(ctx context.Context, statefulP
 								Namespace: pod.Namespace,
 								Name:      pod.Name,
 							}, &pod)
-							if newStatefulPod.IsRunning(&pod) {
+							if statefulPod.IsRunning(&pod) {
 								next <- struct{}{}
 								return
 							}
 						}
 					}()
 					<-next
-					newStatefulPod.Status.PodStatusMes[i].NodeName = pod.Spec.NodeName
-					if err := r.Update(ctx, &newStatefulPod); err != nil {
+					statefulPod.Status.PodStatusMes[i].NodeName = pod.Spec.NodeName
+					if err := r.Update(ctx, statefulPod); err != nil {
 						return
 					}
 				}
 			}
-		}
-	}
+		//}
 }
 
 //删除
 func (r *StatefulPodReconciler) finalize(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
 	myFinalizerName := "statefulPod.finalizers.io"
+	fmt.Println("------------delete",statefulPod.ObjectMeta.DeletionTimestamp)
 	if statefulPod.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !containsString(statefulPod.ObjectMeta.Finalizers, myFinalizerName) {
+			fmt.Println("---------------",statefulPod.ObjectMeta.Finalizers)
 			statefulPod.ObjectMeta.Finalizers = append(statefulPod.ObjectMeta.Finalizers, myFinalizerName)
+			_=r.Update(ctx,statefulPod)
 		}
 	} else {
 		if containsString(statefulPod.ObjectMeta.Finalizers, myFinalizerName) {
@@ -242,6 +258,7 @@ func (r *StatefulPodReconciler) finalize(ctx context.Context, statefulPod *state
 				return err
 			}
 			statefulPod.ObjectMeta.Finalizers = removeString(statefulPod.ObjectMeta.Finalizers, myFinalizerName)
+			_=r.Update(ctx,statefulPod)
 		}
 		return nil
 	}
