@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"sync"
 
@@ -54,29 +53,13 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 		log.Error(err, "unable to fetch statefulPod")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	//初始化statefulpod 创建pod
-	if len(statefulPod.Status.PodStatusMes) == 0 {
-		/*r.watchs=make(chan struct{})
-		r.deleteEnd=make(chan struct{})*/
-		err := r.createPod(ctx, &statefulPod, 0, int(*statefulPod.Spec.Size))
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		go r.maintainPodCopies(ctx, &statefulPod)
-		//return ctrl.Result{}, nil
+
+	if _,ok:=statefulPod.Annotations["index"];!ok{
+		statefulPod.Annotations= map[string]string{"index":"0"}
+		_=r.Update(ctx,&statefulPod)
 	}
-	if int(*statefulPod.Spec.Size) > len(statefulPod.Status.PodStatusMes) { //扩容
-		err := r.expansion(ctx, &statefulPod)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	} else if int(*statefulPod.Spec.Size) < len(statefulPod.Status.PodStatusMes) { //缩容
-		err := r.shrink(ctx, &statefulPod)
-		if err != nil {
-			return ctrl.Result{}, client.IgnoreNotFound(err)
-		}
-	}
-	if err := r.finalize(ctx, &statefulPod); err != nil {
+	index:=stringToInt(statefulPod.Annotations["index"])
+	if err:=r.HandlePod(ctx,&statefulPod,index,int(*statefulPod.Spec.Size));err!=nil{
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -89,197 +72,51 @@ func (r *StatefulPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-//创建pod
-func (r *StatefulPodReconciler) createPod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, leftIndex, rightIndex int) error {
-	next := make(chan struct{})
-	defer close(next)
-	for i := leftIndex; i < rightIndex; i++ {
-		name := statefulPod.Name + strconv.Itoa(i)
-		pod := statefulPod.CreatePod(name)
-		pod.Annotations = map[string]string{
-			"index": strconv.Itoa(i),
-			"parent":statefulpodv1.GroupVersion.String()+statefulpodv1.Kind,
-		}
-		fmt.Println("-----------", pod.Name)
-		if err := r.Create(ctx, pod); err != nil {
-			fmt.Println("create pod err: ", err.Error())
-			return err
-		}
-		go func() {
-			for {
-				_ = r.Get(ctx, types.NamespacedName{
-					Namespace: pod.Namespace,
-					Name:      pod.Name,
-				}, pod)
-				if statefulPod.IsRunning(pod) {
-					next <- struct{}{}
-					return
-				}
-			}
-		}()
-		<-next
-		index := int32(i)
-		fmt.Println(pod.Name,"--------------",pod.Spec.NodeName)
-		statefulPod.Status.PodStatusMes = append(statefulPod.Status.PodStatusMes, statefulpodv1.PodStatus{
-			PodName:  pod.Name,
-			Status:   corev1.PodRunning,
-			Index:    &index,
-			NodeName: pod.Spec.NodeName,
-		})
-		if err := r.Update(ctx, statefulPod); err != nil {
+func (r *StatefulPodReconciler)HandlePod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, leftIndex, rightIndex int) error{
+	if leftIndex<rightIndex{
+		if err:=r.createPod(ctx,statefulPod,leftIndex);err!=nil{
 			return err
 		}
 	}
 	return nil
 }
 
-//删除pod
-func (r *StatefulPodReconciler) deletePod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, leftIndex, rightIndex int) error {
+// 创建pod
+func (r *StatefulPodReconciler) createPod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) error {
 	r.Lock()
 	defer r.Unlock()
-	if statefulPod.Annotations==nil{
-		statefulPod.Annotations= map[string]string{
-			"delete":"true",
-		}
-	}else {
-		statefulPod.Annotations["delete"]="true"
-	}
-	_=r.Update(ctx,statefulPod)
-	next := make(chan struct{})
-	defer close(next)
-	for i := leftIndex; i > rightIndex; i-- {
-		var pod corev1.Pod
-		if err := r.Get(ctx, types.NamespacedName{
-			Namespace: statefulPod.Namespace,
-			Name:      statefulPod.Status.PodStatusMes[i-1].PodName,
-		}, &pod); err != nil {
+	var pod corev1.Pod
+	name := statefulPod.Name + strconv.Itoa(index)
+	if err:=r.Get(ctx,types.NamespacedName{
+		Namespace: statefulPod.Namespace,
+		Name:      name,
+	},&pod);err!=nil{
+		newPod:=statefulPod.CreatePod(name)
+		if err=r.Create(ctx,newPod);err!=nil{
 			return err
 		}
-		if err := r.Delete(ctx, &pod); err != nil {
-			return err
-		}
-		go func() {
-			for {
-				if err := r.Get(ctx, types.NamespacedName{
-					Namespace: pod.Namespace,
-					Name:      pod.Name,
-				}, &pod); err != nil {
-					next <- struct{}{}
-					return
-				}
-			}
-		}()
-		<-next
-		statefulPod.Status.PodStatusMes = statefulPod.Status.PodStatusMes[:len(statefulPod.Status.PodStatusMes)-1]
-		if err := r.Update(ctx, statefulPod); err != nil {
-			return err
-		}
-	}
-	statefulPod.Annotations["delete"]="false"
-	_=r.Update(ctx,statefulPod)
-	return nil
-
-}
-
-//扩容
-func (r *StatefulPodReconciler) expansion(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
-	return r.createPod(ctx, statefulPod, len(statefulPod.Status.PodStatusMes), int(*statefulPod.Spec.Size))
-}
-
-//缩容
-func (r *StatefulPodReconciler) shrink(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
-	return r.deletePod(ctx, statefulPod, len(statefulPod.Status.PodStatusMes), int(*statefulPod.Spec.Size))
-}
-
-//维护pod
-func (r *StatefulPodReconciler) maintainPodCopies(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) {
-	/*for {
-			var newStatefulPod statefulpodv1.StatefulPod
-			if err := r.Get(ctx, types.NamespacedName{
-				Namespace: statefulPod.Namespace,
-				Name:      statefulPod.Name,
-			}, &newStatefulPod); err != nil {
-				return
-			}
-			if newStatefulPod.Annotations["delete"]=="true"{
-				continue
-			}*/
-			next := make(chan struct{})
-			defer close(next)
-			for i, v := range statefulPod.Status.PodStatusMes {
-				var pod corev1.Pod
-				if err := r.Get(ctx, types.NamespacedName{
-					Namespace: statefulPod.Namespace,
-					Name:      v.PodName,
-				}, &pod); err != nil{
-					pod = *statefulPod.CreatePod(v.PodName)
-					pod.Annotations = map[string]string{
-						"index": strconv.Itoa(i),
-						"parent":statefulpodv1.GroupVersion.String()+statefulpodv1.Kind,
-					}
-					if err2 := r.Create(ctx, &pod); err2 != nil {
-						return
-					}
-					go func() {
-						for {
-							_ = r.Get(ctx, types.NamespacedName{
-								Namespace: pod.Namespace,
-								Name:      pod.Name,
-							}, &pod)
-							if statefulPod.IsRunning(&pod) {
-								next <- struct{}{}
-								return
-							}
-						}
-					}()
-					<-next
-					statefulPod.Status.PodStatusMes[i].NodeName = pod.Spec.NodeName
-					if err := r.Update(ctx, statefulPod); err != nil {
-						return
-					}
-				}
-			}
-		//}
-}
-
-//删除
-func (r *StatefulPodReconciler) finalize(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
-	myFinalizerName := "statefulPod.finalizers.io"
-	fmt.Println("------------delete",statefulPod.ObjectMeta.DeletionTimestamp)
-	if statefulPod.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !containsString(statefulPod.ObjectMeta.Finalizers, myFinalizerName) {
-			fmt.Println("---------------",statefulPod.ObjectMeta.Finalizers)
-			statefulPod.ObjectMeta.Finalizers = append(statefulPod.ObjectMeta.Finalizers, myFinalizerName)
-			_=r.Update(ctx,statefulPod)
-		}
-	} else {
-		if containsString(statefulPod.ObjectMeta.Finalizers, myFinalizerName) {
-			if err := r.deletePod(ctx, statefulPod, len(statefulPod.Status.PodStatusMes), 0); err != nil {
-				return err
-			}
-			statefulPod.ObjectMeta.Finalizers = removeString(statefulPod.ObjectMeta.Finalizers, myFinalizerName)
-			_=r.Update(ctx,statefulPod)
-		}
+		podIndex:=int32(index)
+		statefulPod.Status.PodStatusMes=append(statefulPod.Status.PodStatusMes,statefulpodv1.PodStatus{
+			PodName:  newPod.Name,
+			Index:    &podIndex,
+		})
+		_=r.Update(ctx,statefulPod)
 		return nil
 	}
+	if index==len(statefulPod.Status.PodStatusMes){  //防止statefulpod PodStatusMes 更新未同步
+		return nil
+	}
+	statefulPod.Status.PodStatusMes[index].Status=pod.Status.Phase
+	statefulPod.Status.PodStatusMes[index].NodeName=pod.Spec.NodeName
+	_=r.Update(ctx,statefulPod)
+	if pod.Status.Phase==corev1.PodRunning{
+		statefulPod.Annotations["index"]=strconv.Itoa(index+1)
+		_=r.Update(ctx,statefulPod)
+	}
 	return nil
 }
 
-func containsString(strArr []string, value string) bool {
-	for _, v := range strArr {
-		if v == value {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(strArr []string, value string) []string {
-	for i, v := range strArr {
-		if v == value {
-			strArr = append(strArr[:i], strArr[i+1:]...)
-			return strArr
-		}
-	}
-	return strArr
+func stringToInt(string2 string)int{
+	v,_:=strconv.Atoi(string2)
+	return v
 }
