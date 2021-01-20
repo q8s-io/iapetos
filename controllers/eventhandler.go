@@ -20,6 +20,15 @@ func (s StatefulPodEvent) Create(event event.CreateEvent, q workqueue.RateLimiti
 		log.Error(nil, "CreateEvent received with no metadata", "event", event)
 		return
 	}
+	if pod, ok := event.Object.(*corev1.Pod); ok {
+		if _, ok := pod.Annotations[statefulpodv1.GroupVersion.String()]; ok {
+			q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+				Namespace: pod.Namespace,
+				Name:      pod.Name,
+			}})
+			return
+		}
+	}
 }
 
 func (s StatefulPodEvent) Update(event event.UpdateEvent, q workqueue.RateLimitingInterface) {
@@ -28,10 +37,11 @@ func (s StatefulPodEvent) Update(event event.UpdateEvent, q workqueue.RateLimiti
 		return
 	}
 	if pod, ok := event.ObjectNew.(*corev1.Pod); ok {
-		if _,ok:= pod.Annotations[statefulpodv1.GroupVersion.String()];ok{
+		if _, ok := pod.Annotations[statefulpodv1.GroupVersion.String()]; ok {
+			/*fmt.Println(pod.Name+"-------------"+string(pod.Status.Phase))*/
 			q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
 				Namespace: pod.Namespace,
-				Name:      pod.Annotations[statefulpodv1.ParentNmae],
+				Name:      pod.Name,
 			}})
 			return
 		}
@@ -39,7 +49,20 @@ func (s StatefulPodEvent) Update(event event.UpdateEvent, q workqueue.RateLimiti
 }
 
 func (s StatefulPodEvent) Delete(event event.DeleteEvent, q workqueue.RateLimitingInterface) {
-
+	if event.Meta == nil {
+		log.Error(nil, "CreateEvent received with no metadata", "event", event)
+		return
+	}
+	if pod, ok := event.Object.(*corev1.Pod); ok {
+		if _, ok := pod.Annotations[statefulpodv1.GroupVersion.String()]; ok {
+			/*fmt.Println(pod.Name+"-------------"+string(pod.Status.Phase))*/
+			q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+				Namespace: pod.Namespace,
+				Name:      pod.Name,
+			}})
+			return
+		}
+	}
 }
 
 func (s StatefulPodEvent) Generic(event.GenericEvent, workqueue.RateLimitingInterface) {

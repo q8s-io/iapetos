@@ -1,17 +1,18 @@
 package controllers
 
 import (
-	corev1 "k8s.io/api/core/v1"
+	"reflect"
+
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	statefulpodv1 "iapetos/api/v1"
+	"iapetos/controllers/pod"
 )
 
 type StatefulPodPredicate struct {
 }
 
 func (s StatefulPodPredicate) Create(e event.CreateEvent) bool {
-
 	return true
 }
 
@@ -20,21 +21,16 @@ func (s StatefulPodPredicate) Delete(e event.DeleteEvent) bool {
 }
 
 func (s StatefulPodPredicate) Update(e event.UpdateEvent) bool {
-	if _,ok:=e.ObjectOld.(*corev1.Pod);ok{
-		return true
-	}
 	if oldObj, ok := e.ObjectOld.(*statefulpodv1.StatefulPod); ok {
-		if newObj, ok := e.ObjectNew.(*statefulpodv1.StatefulPod); ok {
-			if newObj.Annotations["index"]=="0"{
-				return false
-			}
-			if *oldObj.Spec.Size != *newObj.Spec.Size || oldObj.Annotations["index"]!=newObj.Annotations["index"]{
-				//fmt.Println("index","------------------",oldObj.Annotations["index"])
-				return true
-			}
+		newObj, _ := e.ObjectNew.(*statefulpodv1.StatefulPod)
+		if !reflect.DeepEqual(oldObj.Spec.PodTemplate, newObj.Spec.PodTemplate) {
+			return false
+		}
+		if len(newObj.Status.PodStatusMes) != 0 && newObj.Status.PodStatusMes[len(newObj.Status.PodStatusMes)-1].Status == pod.Prepared {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 func (s StatefulPodPredicate) Generic(e event.GenericEvent) bool {

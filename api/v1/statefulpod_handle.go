@@ -10,7 +10,7 @@ const (
 	Pod        = "Pod"
 	PodVersion = "v1"
 	Kind       = "StatefulPod"
-	ParentNmae="parentName"
+	ParentNmae = "parentName"
 )
 
 func (handle *StatefulPod) CreatePod(podName string) *corev1.Pod {
@@ -24,7 +24,7 @@ func (handle *StatefulPod) CreatePod(podName string) *corev1.Pod {
 			Namespace: handle.Namespace,
 			Annotations: map[string]string{
 				GroupVersion.String(): "true",
-				ParentNmae: handle.Name,
+				ParentNmae:            handle.Name,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(handle, schema.GroupVersionKind{
