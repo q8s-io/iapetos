@@ -6,7 +6,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	statefulpodv1 "iapetos/api/v1"
-	"iapetos/controllers/pod"
+	podcontrl "iapetos/controllers/pod"
 )
 
 type StatefulPodPredicate struct {
@@ -26,7 +26,7 @@ func (s StatefulPodPredicate) Update(e event.UpdateEvent) bool {
 		if !reflect.DeepEqual(oldObj.Spec.PodTemplate, newObj.Spec.PodTemplate) {
 			return false
 		}
-		if len(newObj.Status.PodStatusMes) != 0 && newObj.Status.PodStatusMes[len(newObj.Status.PodStatusMes)-1].Status == pod.Prepared {
+		if len(newObj.Status.PodStatusMes) != 0 && newObj.Status.PodStatusMes[len(newObj.Status.PodStatusMes)-1].Status == podcontrl.Preparing{
 			return false
 		}
 	}

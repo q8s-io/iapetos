@@ -52,7 +52,7 @@ func TestAPIs(t *testing.T) {
 var _ = BeforeSuite(func(done Done) {
 	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
 
-	By("bootstrapping test environment")
+	By("bootstrapping test_pod_features environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
 	}
@@ -75,7 +75,7 @@ var _ = BeforeSuite(func(done Done) {
 }, 60)
 
 var _ = AfterSuite(func() {
-	By("tearing down the test environment")
+	By("tearing down the test_pod_features environment")
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })

@@ -1,11 +1,11 @@
 apiVersion: iapetos.foundary-cloud.io.iapetos.foundary-cloud.io/v1
 kind: StatefulPod
 metadata:
-  name: test_pod_features-statefulpod
+  name: test-statefulpod
   namespace: ldy
 spec:
   size: 4
   podTemplate:
     containers:
-    - name: test_pod_features
-      image: uhub.service.ucloud.cn/infra/nginx:1.17.9
+      - name: test-pod-features
+        image: uhub.service.ucloud.cn/infra/nginx:1.17.9

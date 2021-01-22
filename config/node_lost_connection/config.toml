@@ -1,0 +1,5 @@
+[nodeConfig]
+timeout=5
+
+[podConfig]
+timeout=120
