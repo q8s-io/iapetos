@@ -30,7 +30,7 @@ import (
 
 	iapetosfoundarycloudiov1 "iapetos/api/v1"
 	"iapetos/controllers"
-	_"iapetos/initconfig"
+	_ "iapetos/initconfig"
 	// +kubebuilder:scaffold:imports
 )
 

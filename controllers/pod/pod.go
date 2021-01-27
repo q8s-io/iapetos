@@ -2,6 +2,7 @@ package pod
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -11,16 +12,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	statefulpodv1 "iapetos/api/v1"
+	pvccontrl "iapetos/controllers/pvc"
 )
 
 const (
-	Preparing = corev1.PodPhase("Preparing")
-	Deleting  = corev1.PodPhase("Deleting")
-	ParentNmae = "parentName"
-	StatefulPod       = "StatefulPod"
-	Index = "index"
+	Preparing   = corev1.PodPhase("Preparing")
+	Deleting    = corev1.PodPhase("Deleting")
+	ParentNmae  = "parentName"
+	StatefulPod = "StatefulPod"
+	Index       = "index"
 )
-
 
 type PodController struct {
 	client.Client
@@ -28,18 +29,19 @@ type PodController struct {
 
 type PodContrlIntf interface {
 	IsPodExist(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Pod, error, bool)
-	PodTempale(ctx context.Context,statefulPod *statefulpodv1.StatefulPod,podName string,index int)*corev1.Pod
-	CreatePod(ctx context.Context,pod *corev1.Pod)error
-	DeletePod(ctx context.Context,pod *corev1.Pod)error
-	DeletePodMandatory(ctx context.Context,pod *corev1.Pod)error
-	JudgmentPodDel(pod *corev1.Pod)bool
+	PodTempale(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, podName string, index int) *corev1.Pod
+	CreatePod(ctx context.Context, pod *corev1.Pod) error
+	DeletePod(ctx context.Context, pod *corev1.Pod) error
+	DeletePodMandatory(ctx context.Context, pod *corev1.Pod, statefulPod *statefulpodv1.StatefulPod) error
+	JudgmentPodDel(pod *corev1.Pod) bool
+	DeletePodAll(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error
 }
 
-func NewPodController(client client.Client)PodContrlIntf{
+func NewPodController(client client.Client) PodContrlIntf {
 	return &PodController{client}
 }
 
-func (p *PodController)IsPodExist(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Pod, error, bool) {
+func (p *PodController) IsPodExist(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Pod, error, bool) {
 	var pod corev1.Pod
 	if err := p.Get(ctx, namespaceName, &pod); err != nil {
 		if client.IgnoreNotFound(err) == nil {
@@ -51,7 +53,7 @@ func (p *PodController)IsPodExist(ctx context.Context, namespaceName types.Names
 	}
 }
 
-func (p *PodController)PodTempale(ctx context.Context,statefulPod *statefulpodv1.StatefulPod,podName string,index int)*corev1.Pod{
+func (p *PodController) PodTempale(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, podName string, index int) *corev1.Pod {
 	pod := corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
@@ -62,8 +64,8 @@ func (p *PodController)PodTempale(ctx context.Context,statefulPod *statefulpodv1
 			Namespace: statefulPod.Namespace,
 			Annotations: map[string]string{
 				statefulpodv1.GroupVersion.String(): "true",
-				ParentNmae:            statefulPod.Name,
-				Index: fmt.Sprintf("%v",index),
+				ParentNmae:                          statefulPod.Name,
+				Index:                               fmt.Sprintf("%v", index),
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(statefulPod, schema.GroupVersionKind{
@@ -75,35 +77,65 @@ func (p *PodController)PodTempale(ctx context.Context,statefulPod *statefulpodv1
 		},
 		Spec: *statefulPod.Spec.PodTemplate.DeepCopy(),
 	}
+	if statefulPod.Spec.PvcTemplate != nil {
+		pod.Spec.Volumes[0].PersistentVolumeClaim.ClaimName = pvccontrl.NewPvcController(p.Client).SetPvcName(statefulPod, index)
+	}
 	return &pod
 }
 
-func (p *PodController)CreatePod(ctx context.Context,pod *corev1.Pod)error{
-		if err := p.Create(ctx, pod); err != nil {
-			return err
-		}
-	return nil
-}
+func (p *PodController) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 
-func (p *PodController)DeletePod(ctx context.Context,pod *corev1.Pod)error{
-	if err:=p.Delete(ctx,pod);err!=nil{
+	if err := p.Create(ctx, pod); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (p *PodController)DeletePodMandatory(ctx context.Context,pod *corev1.Pod)error{
-	if err:=p.Delete(ctx,pod,client.DeleteOption(client.GracePeriodSeconds(0)),client.DeleteOption(client.PropagationPolicy(metav1.DeletePropagationBackground)));err!=nil{
+func (p *PodController) DeletePod(ctx context.Context, pod *corev1.Pod) error {
+	if err := p.Delete(ctx, pod); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (p *PodController) DeletePodMandatory(ctx context.Context, pod *corev1.Pod, statefulPod *statefulpodv1.StatefulPod) error {
+	if err := p.Delete(ctx, pod, client.DeleteOption(client.GracePeriodSeconds(0)), client.DeleteOption(client.PropagationPolicy(metav1.DeletePropagationBackground))); err != nil {
+		return err
+	}
+	if statefulPod.Spec.PvcTemplate != nil {
+		pvcName := pod.Spec.Volumes[0].PersistentVolumeClaim.ClaimName
+		if pvc, err, ok := pvccontrl.NewPvcController(p.Client).IsPvcExist(ctx, types.NamespacedName{
+			Namespace: pod.Namespace,
+			Name:      pvcName,
+		}); err == nil && ok {
+			return pvccontrl.NewPvcController(p.Client).DeletePVC(ctx, pvc)
+		} else if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // 判断pod 是否应该是要删除状态
-func (p *PodController)JudgmentPodDel(pod *corev1.Pod)bool{
-	if !pod.DeletionTimestamp.IsZero(){
+func (p *PodController) JudgmentPodDel(pod *corev1.Pod) bool {
+	if !pod.DeletionTimestamp.IsZero() {
 		return true
 	}
 	return false
 }
 
+func (p *PodController) DeletePodAll(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
+	for _, v := range statefulPod.Status.PodStatusMes {
+		if pod, err, ok := p.IsPodExist(ctx, types.NamespacedName{
+			Namespace: statefulPod.Namespace,
+			Name:      v.PodName,
+		}); err == nil && ok {
+			if err := p.Delete(ctx, pod); err != nil {
+				return err
+			}
+		} else {
+			return errors.New("delete pod" + pod.Name + " error")
+		}
+	}
+	return nil
+}

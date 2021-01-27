@@ -8,3 +8,22 @@ func StrToInt(str string) int {
 	v, _ := strconv.Atoi(str)
 	return v
 }
+
+func ContainsString(strArray []string, value string) bool {
+	for _, v := range strArray {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+
+func RemoveString(strArray []string, value string) []string {
+	for i, v := range strArray {
+		if v == value {
+			strArray = append(strArray[:i], strArray[i+1:]...)
+			break
+		}
+	}
+	return strArray
+}

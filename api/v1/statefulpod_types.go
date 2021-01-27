@@ -30,15 +30,17 @@ type StatefulPodSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// +kubebuilder:validation:Minimum=1
-	Size        *int32         `json:"size"`
-	PodTemplate corev1.PodSpec `json:"podTemplate"`
+	Size        *int32                            `json:"size"`
+	PodTemplate corev1.PodSpec                    `json:"podTemplate"`
+	PvcTemplate *corev1.PersistentVolumeClaimSpec `json:"pvcTemplate,omitempty"`
 }
 
 // StatefulPodStatus defines the observed state of StatefulPod
 type StatefulPodStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	PodStatusMes []PodStatus `json:"podStatus"`
+	PodStatusMes []PodStatus `json:"podStatus,omitempty"`
+	PvcStatusMes []PvcStatus `json:"pvcStatus,omitempty"`
 }
 
 type PodStatus struct {
@@ -46,6 +48,15 @@ type PodStatus struct {
 	Status   corev1.PodPhase `json:"status"`
 	Index    *int32          `json:"index"`
 	NodeName string          `json:"nodeName"`
+}
+
+type PvcStatus struct {
+	Index        *int32                              `json:"index"`
+	PvcName      string                              `json:"pvcName"`
+	Status       corev1.PersistentVolumeClaimPhase   `json:"status"`
+	Capacity     string                              `json:"capacity"`
+	AccessModes  []corev1.PersistentVolumeAccessMode `json:"accessModes"`
+	StorageClass string                              `json:"storageClass"`
 }
 
 // +kubebuilder:object:root=true

@@ -10,7 +10,7 @@ var StatefulPodResourceCfg Config
 
 type Config struct {
 	Node NodeConfig `toml:"nodeConfig"`
-	Pod PodConfig `toml:"podConfig"`
+	Pod  PodConfig  `toml:"podConfig"`
 }
 
 type PodConfig struct {

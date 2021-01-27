@@ -47,34 +47,51 @@ type StatefulPodReconciler struct {
 func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	statefulPodLog := r.Log.WithValues("statefulpod", req.NamespacedName)
-	podLog := r.Log.WithValues("pod",req.NamespacedName)
+	podLog := r.Log.WithValues("pod", req.NamespacedName)
+	pvcLog := r.Log.WithValues("pvc", req.NamespacedName)
 	var statefulPod statefulpodv1.StatefulPod
 	var pod corev1.Pod
+	var pvc corev1.PersistentVolumeClaim
 	// statefulPod
+
 	if err := r.Get(ctx, req.NamespacedName, &statefulPod); err != nil {
 		if client.IgnoreNotFound(err) != nil {
-			statefulPodLog.Error(err,"unable to fetch statefulPod")
+			statefulPodLog.Error(err, "unable to fetch statefulPod")
 			return ctrl.Result{}, err
 		}
 	} else {
-		if err:=statefulpodcontrl.NewStatefulPodController(r.Client).StatefulPodContrl(ctx,&statefulPod);err!=nil{
-			statefulPodLog.Error(err,"handle statefulPod error")
-			return ctrl.Result{},err
+		if err := statefulpodcontrl.NewStatefulPodController(r.Client).StatefulPodContrl(ctx, &statefulPod); err != nil {
+			statefulPodLog.Error(err, "handle statefulPod error")
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{},nil
+		return ctrl.Result{}, nil
 	}
 	// pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if client.IgnoreNotFound(err) != nil {
-			podLog.Error(err,"unable to fetch pod")
+			podLog.Error(err, "unable to fetch pod")
 			return ctrl.Result{}, err
 		}
 	} else {
-		if err:=statefulpodcontrl.NewStatefulPodController(r.Client).MonitorPodStatus(ctx,&pod);err!=nil{
-			podLog.Error(err,"handle pod error")
-			return ctrl.Result{},err
+		if err := statefulpodcontrl.NewStatefulPodController(r.Client).MonitorPodStatus(ctx, &pod); err != nil {
+			podLog.Error(err, "handle pod error")
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{},nil
+		return ctrl.Result{}, nil
+	}
+
+	// PVC
+	if err := r.Get(ctx, req.NamespacedName, &pvc); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			podLog.Error(err, "unable to fetch pvc")
+			return ctrl.Result{}, err
+		}
+	} else {
+		if err := statefulpodcontrl.NewStatefulPodController(r.Client).MonitorPVCStatus(ctx, &pvc); err != nil {
+			pvcLog.Error(err, "handle pod error")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
 	}
 	return ctrl.Result{}, nil
 }
@@ -82,6 +99,7 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 func (r *StatefulPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).For(&statefulpodv1.StatefulPod{}).
 		Watches(&source.Kind{Type: &corev1.Pod{}}, &StatefulPodEvent{}).
+		Watches(&source.Kind{Type: &corev1.PersistentVolumeClaim{}}, &StatefulPodEvent{}).
 		WithEventFilter(StatefulPodPredicate{}).
 		Complete(r)
 }

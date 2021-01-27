@@ -29,6 +29,15 @@ func (s StatefulPodEvent) Create(event event.CreateEvent, q workqueue.RateLimiti
 			return
 		}
 	}
+	if pvc, ok := event.Object.(*corev1.PersistentVolumeClaim); ok {
+		if _, ok := pvc.Annotations[statefulpodv1.GroupVersion.String()]; ok {
+			q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+				Namespace: pvc.Namespace,
+				Name:      pvc.Name,
+			}})
+			return
+		}
+	}
 }
 
 func (s StatefulPodEvent) Update(event event.UpdateEvent, q workqueue.RateLimitingInterface) {
@@ -45,6 +54,15 @@ func (s StatefulPodEvent) Update(event event.UpdateEvent, q workqueue.RateLimiti
 			return
 		}
 	}
+	if pvc, ok := event.ObjectNew.(*corev1.PersistentVolumeClaim); ok {
+		if _, ok := pvc.Annotations[statefulpodv1.GroupVersion.String()]; ok {
+			q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+				Namespace: pvc.Namespace,
+				Name:      pvc.Name,
+			}})
+			return
+		}
+	}
 }
 
 func (s StatefulPodEvent) Delete(event event.DeleteEvent, q workqueue.RateLimitingInterface) {
@@ -57,6 +75,15 @@ func (s StatefulPodEvent) Delete(event event.DeleteEvent, q workqueue.RateLimiti
 			q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
 				Namespace: pod.Namespace,
 				Name:      pod.Name,
+			}})
+			return
+		}
+	}
+	if pvc, ok := event.Object.(*corev1.PersistentVolumeClaim); ok {
+		if _, ok := pvc.Annotations[statefulpodv1.GroupVersion.String()]; ok {
+			q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+				Namespace: pvc.Namespace,
+				Name:      pvc.Name,
 			}})
 			return
 		}

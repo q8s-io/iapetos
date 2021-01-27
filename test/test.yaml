@@ -1,0 +1,25 @@
+apiVersion: iapetos.foundary-cloud.io.iapetos.foundary-cloud.io/v1
+kind: StatefulPod
+metadata:
+  name: test-statefulpod
+  namespace: ldy
+spec:
+  size: 3
+  podTemplate:
+    containers:
+      - name: test
+        image: uhub.service.ucloud.cn/infra/nginx:1.17.9
+        volumeMounts:
+          - name: test
+            mountPath: /test
+    volumes:
+      - name: test
+        persistentVolumeClaim:
+          claimName: data
+  pvcTemplate:
+    storageClassName: "stateful-pod-class"
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 1Gi
