@@ -57,6 +57,9 @@ func (s *StatefulPodController) changeStatefulPod(ctx context.Context, statefulP
 				Namespace: statefulPod.Namespace,
 				Name:      statefulPod.Name,
 			})
+			if newStatefulPod == nil {
+				break
+			}
 			newStatefulPod.Status.PodStatusMes[index] = statefulPod.Status.PodStatusMes[index]
 			newStatefulPod.Status.PvcStatusMes[index] = statefulPod.Status.PvcStatusMes[index]
 			statefulPod = newStatefulPod
