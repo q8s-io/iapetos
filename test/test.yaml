@@ -4,6 +4,7 @@ metadata:
   name: test-statefulpod
   namespace: ldy
 spec:
+  pvRecyclePolicy: "Retain"
   size: 3
   podTemplate:
     containers:

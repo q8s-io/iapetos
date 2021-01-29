@@ -30,9 +30,10 @@ type StatefulPodSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// +kubebuilder:validation:Minimum=1
-	Size        *int32                            `json:"size"`
-	PodTemplate corev1.PodSpec                    `json:"podTemplate"`
-	PvcTemplate *corev1.PersistentVolumeClaimSpec `json:"pvcTemplate,omitempty"`
+	Size            *int32                               `json:"size"`
+	PVRecyclePolicy corev1.PersistentVolumeReclaimPolicy `json:"pvRecyclePolicy,omitempty"`
+	PodTemplate     corev1.PodSpec                       `json:"podTemplate"`
+	PvcTemplate     *corev1.PersistentVolumeClaimSpec    `json:"pvcTemplate,omitempty"`
 }
 
 // StatefulPodStatus defines the observed state of StatefulPod

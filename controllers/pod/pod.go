@@ -2,7 +2,6 @@ package pod
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -12,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	statefulpodv1 "iapetos/api/v1"
+	pvcontrl "iapetos/controllers/pv"
 	pvccontrl "iapetos/controllers/pvc"
 )
 
@@ -125,7 +125,7 @@ func (p *PodController) JudgmentPodDel(pod *corev1.Pod) bool {
 }
 
 func (p *PodController) DeletePodAll(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
-	for _, v := range statefulPod.Status.PodStatusMes {
+	for i, v := range statefulPod.Status.PodStatusMes {
 		if pod, err, ok := p.IsPodExist(ctx, types.NamespacedName{
 			Namespace: statefulPod.Namespace,
 			Name:      v.PodName,
@@ -133,8 +133,40 @@ func (p *PodController) DeletePodAll(ctx context.Context, statefulPod *statefulp
 			if err := p.Delete(ctx, pod); err != nil {
 				return err
 			}
-		} else {
-			return errors.New("delete pod" + pod.Name + " error")
+			pvcName := pvccontrl.NewPvcController(p.Client).SetPvcName(statefulPod, i)
+			if pvc, err, ok := pvccontrl.NewPvcController(p.Client).IsPvcExist(ctx, types.NamespacedName{
+				Namespace: statefulPod.Namespace,
+				Name:      pvcName,
+			}); err == nil && ok {
+				if statefulPod.Spec.PVRecyclePolicy == corev1.PersistentVolumeReclaimRetain {
+					pvName := pvc.Spec.VolumeName
+					if err := pvcontrl.NewPVController(p.Client).SetPVRetain(ctx, &pvName); err != nil {
+						return err
+					}
+					if err := pvccontrl.NewPvcController(p.Client).DeletePVC(ctx, pvc); err != nil {
+						return err
+					}
+					for {
+						if _, err, ok := pvccontrl.NewPvcController(p.Client).IsPvcExist(ctx, types.NamespacedName{
+							Namespace: pvc.Namespace,
+							Name:      pvc.Name,
+						}); err == nil && !ok {
+							break
+						}
+					}
+					if err := pvcontrl.NewPVController(p.Client).SetVolumeAvailable(ctx, &pvName); err != nil {
+						return err
+					}
+				} else {
+					if err := pvccontrl.NewPvcController(p.Client).DeletePVC(ctx, pvc); err != nil {
+						return err
+					}
+				}
+			} else if err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
 		}
 	}
 	return nil
