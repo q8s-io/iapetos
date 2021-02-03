@@ -33,6 +33,7 @@ func NewServiceContrl(client client.Client) ServiceIntf {
 	return &ServiceController{client}
 }
 
+// 判断 service 是否存在
 func (s *ServiceController) IsServiceExits(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Service, error, bool) {
 	var service corev1.Service
 	if err := s.Get(ctx, namespaceName, &service); err != nil {
@@ -45,6 +46,7 @@ func (s *ServiceController) IsServiceExits(ctx context.Context, namespaceName ty
 	}
 }
 
+// 创建 service 模板
 func (s *ServiceController) ServiceTemplate(statefulPod *statefulpodv1.StatefulPod) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -70,6 +72,7 @@ func (s *ServiceController) ServiceTemplate(statefulPod *statefulpodv1.StatefulP
 	}
 }
 
+// 创建 service
 func (s *ServiceController) CreateService(ctx context.Context, service *corev1.Service) error {
 	if err := s.Create(ctx, service); err != nil {
 		return err
@@ -77,6 +80,7 @@ func (s *ServiceController) CreateService(ctx context.Context, service *corev1.S
 	return nil
 }
 
+// 设置 service name
 func (s *ServiceController) SetServiceName(statefulPod *statefulpodv1.StatefulPod) string {
 	return fmt.Sprintf("%v-%v", statefulPod.Name, "service")
 }

@@ -23,6 +23,7 @@ func NewPVController(client client.Client) PVContrlIntf {
 	return &PVController{client}
 }
 
+// 判断 pv 是否存在
 func (p *PVController) IsPVExists(ctx context.Context, namespaceName types.NamespacedName) (*corev1.PersistentVolume, error, bool) {
 	var pv corev1.PersistentVolume
 	if err := p.Get(ctx, types.NamespacedName{
@@ -38,6 +39,7 @@ func (p *PVController) IsPVExists(ctx context.Context, namespaceName types.Names
 	return &pv, nil, true
 }
 
+// 将 pv 的回收策略设置为 Retain
 func (p *PVController) SetPVRetain(ctx context.Context, pvName *string) error {
 	if pv, err, ok := p.IsPVExists(ctx, types.NamespacedName{
 		Namespace: corev1.NamespaceAll,
@@ -52,6 +54,7 @@ func (p *PVController) SetPVRetain(ctx context.Context, pvName *string) error {
 	return nil
 }
 
+// 等待将 pv 的回收策略设置为 Retain
 func (p *PVController) updatePV(ctx context.Context, pv *corev1.PersistentVolume) error {
 	if err := p.Update(ctx, pv); err != nil {
 		return err
@@ -71,6 +74,7 @@ func (p *PVController) updatePV(ctx context.Context, pv *corev1.PersistentVolume
 	return nil
 }
 
+// 将 pv 状态设置为 Available
 func (p *PVController) SetVolumeAvailable(ctx context.Context, pvName *string) error {
 	if pv, err, ok := p.IsPVExists(ctx, types.NamespacedName{
 		Namespace: corev1.NamespaceAll,
@@ -86,6 +90,7 @@ func (p *PVController) SetVolumeAvailable(ctx context.Context, pvName *string) e
 	return nil
 }
 
+// 修改 pv 状态 防止资源修改冲突
 func (p *PVController) changePVStatus(ctx context.Context, pv *corev1.PersistentVolume) error {
 	for {
 		if err := p.Update(ctx, pv, client.DryRunAll); err == nil {

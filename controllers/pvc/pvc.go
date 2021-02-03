@@ -30,7 +30,6 @@ type PvcContrlIntf interface {
 	CreatePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim) error
 	IsPvcExist(ctx context.Context, name types.NamespacedName) (*corev1.PersistentVolumeClaim, error, bool)
 	DeletePVC(ctx context.Context, deletePVC *corev1.PersistentVolumeClaim) error
-	DeletePVCFinalizer(ctx context.Context, pvc *corev1.PersistentVolumeClaim) error
 	SetPvcName(statefulPod *statefulpodv1.StatefulPod, index int) string
 }
 
@@ -38,6 +37,7 @@ func NewPvcController(client client.Client) PvcContrlIntf {
 	return &PvcController{client}
 }
 
+// 创建 pvc 模板
 func (p *PvcController) PvcTemplate(ctx context.Context, statefulpod *statefulpodv1.StatefulPod, pvcName string, index int) (*corev1.PersistentVolumeClaim, error) {
 
 	return &corev1.PersistentVolumeClaim{
@@ -65,6 +65,7 @@ func (p *PvcController) PvcTemplate(ctx context.Context, statefulpod *statefulpo
 	}, nil
 }
 
+// 判断 pvc 是否存在
 func (p *PvcController) IsPvcExist(ctx context.Context, nameSpaceName types.NamespacedName) (*corev1.PersistentVolumeClaim, error, bool) {
 	var pvc corev1.PersistentVolumeClaim
 	if err := p.Get(ctx, types.NamespacedName{
@@ -79,6 +80,7 @@ func (p *PvcController) IsPvcExist(ctx context.Context, nameSpaceName types.Name
 	return &pvc, nil, true
 }
 
+// 创建 pvc
 func (p *PvcController) CreatePVC(ctx context.Context, createPvc *corev1.PersistentVolumeClaim) error {
 	if err := p.Create(ctx, createPvc); err != nil {
 		return err
@@ -86,6 +88,7 @@ func (p *PvcController) CreatePVC(ctx context.Context, createPvc *corev1.Persist
 	return nil
 }
 
+// 删除 pvc
 func (p *PvcController) DeletePVC(ctx context.Context, deletePVC *corev1.PersistentVolumeClaim) error {
 	if err := p.Delete(ctx, deletePVC); err != nil {
 		return err
@@ -93,14 +96,7 @@ func (p *PvcController) DeletePVC(ctx context.Context, deletePVC *corev1.Persist
 	return nil
 }
 
-func (p *PvcController) DeletePVCFinalizer(ctx context.Context, pvc *corev1.PersistentVolumeClaim) error {
-	pvc.Finalizers = nil
-	if err := p.Update(ctx, pvc); err != nil {
-		return err
-	}
-	return nil
-}
-
+// 设置 pvc name
 func (p *PvcController) SetPvcName(statefulPod *statefulpodv1.StatefulPod, index int) string {
 	if statefulPod.Spec.PvcTemplate == nil {
 		return "none"

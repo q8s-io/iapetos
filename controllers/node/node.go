@@ -23,6 +23,7 @@ func NewNodeContrl(client client.Client) NodeContrlIntf {
 	return &NodeController{client}
 }
 
+// 判断 node 是否正常
 func (n *NodeController) IsNodeReady(ctx context.Context, nodeName string) bool {
 	if nodeName == "" {
 		return true

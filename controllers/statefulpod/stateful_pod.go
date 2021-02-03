@@ -32,6 +32,10 @@ func NewStatefulPodController(client client.Client) StatefulPodContrlInf {
 	return &StatefulPodController{client}
 }
 
+// statefulPod 控制器
+// 若 len(statefulPod.Status.PodStatusMes) < int(*statefulPod.Spec.Size) 扩容
+// 若 len(statefulPod.Status.PodStatusMes) > int(*statefulPod.Spec.Size) 缩容
+// 若 len(statefulPod.Status.PodStatusMes) == int(*statefulPod.Spec.Size) 设置Finalizer,维护
 func (s *StatefulPodController) StatefulPodContrl(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
 	lenStatus := len(statefulPod.Status.PodStatusMes)
 	if len(statefulPod.Status.PodStatusMes) < int(*statefulPod.Spec.Size) {
@@ -46,6 +50,7 @@ func (s *StatefulPodController) StatefulPodContrl(ctx context.Context, statefulP
 	}
 }
 
+// 修改 statefulSet 状态,index 代表podStatus pvcStatus 要修改的索引位置
 func (s *StatefulPodController) changeStatefulPod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) error {
 	for {
 		if err := s.Update(ctx, statefulPod, client.DryRunAll); err == nil {
@@ -91,6 +96,10 @@ func (s *StatefulPodController) maintainPod(ctx context.Context, statefulPod *st
 }
 
 // 扩容
+// 若index ==0 ,创建 service
+// 若 pvc 需要创建，则创建pvc ,不需要pvcStatus设置为0值
+// 若 index == len(statefulPod.Status.PodStatusMes) 代表创建
+// 若 index != len(statefulPod.Status.PodStatusMes) 代表维护
 func (s *StatefulPodController) expansionPod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) error {
 	if index == 0 {
 		if ok, err := s.createService(ctx, statefulPod); err != nil {
@@ -153,13 +162,14 @@ func (s *StatefulPodController) expansionPod(ctx context.Context, statefulPod *s
 	return nil
 }
 
-// 缩容
+// 缩容 若pvc存在 ,删除pvc
 func (s *StatefulPodController) shrinkPod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) error {
 	podName := fmt.Sprintf("%v%v", statefulPod.Name, index-1)
 	if pod, err, ok := podcontrl.NewPodController(s.Client).IsPodExist(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      podName,
 	}); err == nil && ok {
+		// 若pod 已经删除过则不再删除
 		if podcontrl.NewPodController(s.Client).JudgmentPodDel(pod) {
 			return nil
 		}
@@ -167,11 +177,13 @@ func (s *StatefulPodController) shrinkPod(ctx context.Context, statefulPod *stat
 			return err
 		}
 	} else if err == nil && !ok {
+		// pod 删除完毕 删除 pvc
 		return s.shrinkPvc(ctx, statefulPod, index)
 	}
 	return nil
 }
 
+// 根据 namespace name 获取 statefulPod
 func (s *StatefulPodController) getStatefulPod(ctx context.Context, namespaceName *types.NamespacedName) *statefulpodv1.StatefulPod {
 	var statefulPod statefulpodv1.StatefulPod
 	if err := s.Get(ctx, types.NamespacedName{
@@ -194,6 +206,7 @@ func (s *StatefulPodController) setFinalizer(ctx context.Context, statefulPod *s
 			}
 		}
 	} else {
+		// 删除 statefulPod
 		if tools.ContainsString(statefulPod.Finalizers, myFinalizerName) {
 			if err := podcontrl.NewPodController(s.Client).DeletePodAll(ctx, statefulPod); err != nil {
 				return err
@@ -352,6 +365,7 @@ func (s *StatefulPodController) MonitorPVCStatus(ctx context.Context, pvc *corev
 	return nil
 }
 
+// 创建 service
 func (s *StatefulPodController) createService(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) (bool, error) {
 	serviceName := fmt.Sprintf("%v-%v", statefulPod.Name, "service")
 	if _, err, ok := servicecontrl.NewServiceContrl(s.Client).IsServiceExits(ctx, types.NamespacedName{

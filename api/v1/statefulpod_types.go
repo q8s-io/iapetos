@@ -45,6 +45,7 @@ type StatefulPodStatus struct {
 	PvcStatusMes []PvcStatus `json:"pvcStatus,omitempty"`
 }
 
+// pod 状态
 type PodStatus struct {
 	PodName  string          `json:"podName"`
 	Status   corev1.PodPhase `json:"status"`
@@ -52,6 +53,7 @@ type PodStatus struct {
 	NodeName string          `json:"nodeName"`
 }
 
+// pvc 状态
 type PvcStatus struct {
 	Index        *int32                              `json:"index"`
 	PvcName      string                              `json:"pvcName"`
