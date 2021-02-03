@@ -80,6 +80,9 @@ func (p *PodController) PodTempale(ctx context.Context, statefulPod *statefulpod
 	if statefulPod.Spec.PvcTemplate != nil {
 		pod.Spec.Volumes[0].PersistentVolumeClaim.ClaimName = pvccontrl.NewPvcController(p.Client).SetPvcName(statefulPod, index)
 	}
+	if statefulPod.Spec.ServiceTemplate != nil {
+		pod.Labels = statefulPod.Spec.ServiceTemplate.Selector
+	}
 	return &pod
 }
 

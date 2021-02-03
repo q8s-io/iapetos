@@ -32,6 +32,7 @@ type StatefulPodSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	Size            *int32                               `json:"size"`
 	PVRecyclePolicy corev1.PersistentVolumeReclaimPolicy `json:"pvRecyclePolicy,omitempty"`
+	ServiceTemplate *corev1.ServiceSpec                  `json:"serviceTemplate,omitempty"`
 	PodTemplate     corev1.PodSpec                       `json:"podTemplate"`
 	PvcTemplate     *corev1.PersistentVolumeClaimSpec    `json:"pvcTemplate,omitempty"`
 }

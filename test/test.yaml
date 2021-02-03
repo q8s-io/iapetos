@@ -17,6 +17,14 @@ spec:
       - name: test
         persistentVolumeClaim:
           claimName: data
+  serviceTemplate:
+    selector:
+      app: v1
+      test: "true"
+    clusterIP: None
+    ports:
+      - port: 80
+        targetPort: 80
   pvcTemplate:
     storageClassName: "stateful-pod-class"
     accessModes:

@@ -13,6 +13,7 @@ import (
 	nodecontrl "iapetos/controllers/node"
 	podcontrl "iapetos/controllers/pod"
 	pvccontrl "iapetos/controllers/pvc"
+	servicecontrl "iapetos/controllers/service"
 	resourcecfg "iapetos/initconfig"
 	"iapetos/tools"
 )
@@ -91,6 +92,13 @@ func (s *StatefulPodController) maintainPod(ctx context.Context, statefulPod *st
 
 // 扩容
 func (s *StatefulPodController) expansionPod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) error {
+	if index == 0 {
+		if ok, err := s.createService(ctx, statefulPod); err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
+	}
 	podIndex := int32(index)
 	podName := fmt.Sprintf("%v%v", statefulPod.Name, index)
 	if _, err, ok := podcontrl.NewPodController(s.Client).IsPodExist(ctx, types.NamespacedName{
@@ -253,7 +261,25 @@ func (s *StatefulPodController) MonitorPodStatus(ctx context.Context, pod *corev
 
 	// create pod timeout
 	if time.Now().Sub(pod.CreationTimestamp.Time) >= time.Second*time.Duration(resourcecfg.StatefulPodResourceCfg.Pod.Timeout) && pod.Status.Phase != corev1.PodRunning {
-
+		if err := podcontrl.NewPodController(s.Client).DeletePod(ctx, pod); err != nil {
+			return err
+		}
+		pvcName := pvccontrl.NewPvcController(s.Client).SetPvcName(statefulPod, index)
+		if pvc, err, ok := pvccontrl.NewPvcController(s.Client).IsPvcExist(ctx, types.NamespacedName{
+			Namespace: statefulPod.Namespace,
+			Name:      pvcName,
+		}); err == nil && ok {
+			if err := pvccontrl.NewPvcController(s.Client).DeletePVC(ctx, pvc); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		statefulPod.Status.PodStatusMes[index].Status = podcontrl.Deleting
+		statefulPod.Status.PvcStatusMes[index].Status = pvccontrl.Deleting
+		if err := s.changeStatefulPod(ctx, statefulPod, index); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -319,8 +345,25 @@ func (s *StatefulPodController) MonitorPVCStatus(ctx context.Context, pvc *corev
 			return nil
 		}
 		statefulPod.Status.PvcStatusMes[index].Status = corev1.ClaimBound
-		statefulPod.Status.PvcStatusMes[index].Capacity = pvc.Spec.Resources.Requests.StorageEphemeral().String()
+		capicity := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+		statefulPod.Status.PvcStatusMes[index].Capacity = capicity.String()
 		return s.changeStatefulPod(ctx, statefulPod, index)
 	}
 	return nil
+}
+
+func (s *StatefulPodController) createService(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) (bool, error) {
+	serviceName := fmt.Sprintf("%v-%v", statefulPod.Name, "service")
+	if _, err, ok := servicecontrl.NewServiceContrl(s.Client).IsServiceExits(ctx, types.NamespacedName{
+		Namespace: statefulPod.Namespace,
+		Name:      serviceName,
+	}); err == nil && !ok {
+		serviceTemplate := servicecontrl.NewServiceContrl(s.Client).ServiceTemplate(statefulPod)
+		if err := servicecontrl.NewServiceContrl(s.Client).CreateService(ctx, serviceTemplate); err != nil {
+			return false, err
+		}
+	} else if err == nil && ok {
+		return true, nil
+	}
+	return false, nil
 }
