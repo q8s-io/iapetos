@@ -34,7 +34,9 @@ func (n *NodeController) IsNodeReady(ctx context.Context, nodeName string) bool 
 		Name:      nodeName,
 	}, &node); err != nil {
 		return false
-	}
+	} // 判断 node是否存在
+	// 存在，判断是否超时 即判断node.spec.conditions最后一个元素的状态是否为true ,若不为true，
+	// 判断失联时间是否超时
 	timeOut := time.Second * time.Duration(resourcecfg.StatefulPodResourceCfg.Node.Timeout)
 	if node.Status.Conditions[len(node.Status.Conditions)-1].Status != corev1.ConditionTrue {
 		lostConactTime := node.Status.Conditions[len(node.Status.Conditions)-1].LastTransitionTime

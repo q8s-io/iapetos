@@ -39,7 +39,6 @@ func NewPvcController(client client.Client) PvcContrlIntf {
 
 // 创建 pvc 模板
 func (p *PvcController) PvcTemplate(ctx context.Context, statefulpod *statefulpodv1.StatefulPod, pvcName string, index int) (*corev1.PersistentVolumeClaim, error) {
-
 	return &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -98,7 +97,7 @@ func (p *PvcController) DeletePVC(ctx context.Context, deletePVC *corev1.Persist
 
 // 设置 pvc name
 func (p *PvcController) SetPvcName(statefulPod *statefulpodv1.StatefulPod, index int) string {
-	if statefulPod.Spec.PvcTemplate == nil {
+	if statefulPod.Spec.PvcTemplate == nil { // pvc 不需要创建，返回 none
 		return "none"
 	}
 	return fmt.Sprintf("%v-%v-%v", statefulPod.Spec.PodTemplate.Volumes[0].PersistentVolumeClaim.ClaimName, statefulPod.Name, index)

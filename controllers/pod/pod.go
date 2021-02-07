@@ -46,7 +46,7 @@ func NewPodController(client client.Client) PodContrlIntf {
 func (p *PodController) IsPodExist(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Pod, error, bool) {
 	var pod corev1.Pod
 	if err := p.Get(ctx, namespaceName, &pod); err != nil {
-		if client.IgnoreNotFound(err) == nil {
+		if client.IgnoreNotFound(err) == nil { // 找不到改pod
 			return nil, nil, false
 		}
 		return nil, err, false
@@ -115,11 +115,11 @@ func (p *PodController) DeletePodMandatory(ctx context.Context, pod *corev1.Pod,
 		return err
 	}
 	if statefulPod.Spec.PvcTemplate != nil {
-		pvcName := pvccontrl.NewPvcController(p.Client).SetPvcName(statefulPod,tools.StrToInt(pod.Annotations["index"]))
+		pvcName := pvccontrl.NewPvcController(p.Client).SetPvcName(statefulPod, tools.StrToInt(pod.Annotations["index"]))
 		if pvc, err, ok := pvccontrl.NewPvcController(p.Client).IsPvcExist(ctx, types.NamespacedName{
 			Namespace: pod.Namespace,
 			Name:      pvcName,
-		}); err == nil && ok {
+		}); err == nil && ok { // pvc 存在
 			return pvccontrl.NewPvcController(p.Client).DeletePVC(ctx, pvc)
 		} else if err != nil {
 			return err
@@ -143,7 +143,7 @@ func (p *PodController) DeletePodAll(ctx context.Context, statefulPod *statefulp
 		if pod, err, ok := p.IsPodExist(ctx, types.NamespacedName{
 			Namespace: statefulPod.Namespace,
 			Name:      v.PodName,
-		}); err == nil && ok {
+		}); err == nil && ok { // pod 存在，删除 pod
 			if err := p.Delete(ctx, pod); err != nil {
 				return err
 			}
@@ -151,27 +151,31 @@ func (p *PodController) DeletePodAll(ctx context.Context, statefulPod *statefulp
 			if pvc, err, ok := pvccontrl.NewPvcController(p.Client).IsPvcExist(ctx, types.NamespacedName{
 				Namespace: statefulPod.Namespace,
 				Name:      pvcName,
-			}); err == nil && ok {
-				if statefulPod.Spec.PVRecyclePolicy == corev1.PersistentVolumeReclaimRetain {
+			}); err == nil && ok { // pvc 存在 ，删除pvc
+				if statefulPod.Spec.PVRecyclePolicy == corev1.PersistentVolumeReclaimRetain { // 判断 pv 策略是否为回收策略
 					pvName := pvc.Spec.VolumeName
-					if err := pvcontrl.NewPVController(p.Client).SetPVRetain(ctx, &pvName); err != nil {
+					if err := pvcontrl.NewPVController(p.Client).SetPVRetain(ctx, &pvName); err != nil { // 将 pv 策略设置为回收策略
 						return err
 					}
+					//删除 pvc
 					if err := pvccontrl.NewPvcController(p.Client).DeletePVC(ctx, pvc); err != nil {
 						return err
 					}
+					// 等待 pvc 删除完毕
 					for {
 						if _, err, ok := pvccontrl.NewPvcController(p.Client).IsPvcExist(ctx, types.NamespacedName{
 							Namespace: pvc.Namespace,
 							Name:      pvc.Name,
-						}); err == nil && !ok {
+						}); err == nil && !ok { // pvc 删除完毕，退出
 							break
 						}
 					}
+					// 将 pv 设置为可用
 					if err := pvcontrl.NewPVController(p.Client).SetVolumeAvailable(ctx, &pvName); err != nil {
 						return err
 					}
 				} else {
+					// 直接删除 pvc
 					if err := pvccontrl.NewPvcController(p.Client).DeletePVC(ctx, pvc); err != nil {
 						return err
 					}

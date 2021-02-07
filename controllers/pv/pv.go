@@ -2,7 +2,6 @@ package pv
 
 import (
 	"context"
-	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,7 +29,6 @@ func (p *PVController) IsPVExists(ctx context.Context, namespaceName types.Names
 		Namespace: namespaceName.Namespace,
 		Name:      namespaceName.Name,
 	}, &pv); err != nil {
-		fmt.Println("find PV error: ", err.Error())
 		if client.IgnoreNotFound(err) == nil {
 			return nil, nil, false
 		}
@@ -39,15 +37,15 @@ func (p *PVController) IsPVExists(ctx context.Context, namespaceName types.Names
 	return &pv, nil, true
 }
 
-// 将 pv 的回收策略设置为 Retain
+// 将 pv 的删除策略设置为 Retain
 func (p *PVController) SetPVRetain(ctx context.Context, pvName *string) error {
 	if pv, err, ok := p.IsPVExists(ctx, types.NamespacedName{
 		Namespace: corev1.NamespaceAll,
 		Name:      *pvName,
-	}); err == nil && ok {
+	}); err == nil && ok { // pv 存在 将pv删除策略设置为 回收，同时将StorageClassName 设置为空
 		pv.Spec.PersistentVolumeReclaimPolicy = corev1.PersistentVolumeReclaimRetain
 		pv.Spec.StorageClassName = ""
-		if err := p.updatePV(ctx, pv); err != nil {
+		if err := p.updatePV(ctx, pv); err != nil { // 修改 pv状态，即设置 pv的删除策略为回收
 			return err
 		}
 	}
@@ -59,14 +57,16 @@ func (p *PVController) updatePV(ctx context.Context, pv *corev1.PersistentVolume
 	if err := p.Update(ctx, pv); err != nil {
 		return err
 	}
+	// 循环等待，知道pv的删除策略成功设置为回收
 	for {
 		pv, _, _ = p.IsPVExists(ctx, types.NamespacedName{
 			Namespace: "",
 			Name:      pv.Name,
 		})
-		if pv == nil {
+		if pv == nil { // pv 不存在，退出
 			break
 		}
+		// pv 删除策略成功设置为回收，退出
 		if pv.Spec.PersistentVolumeReclaimPolicy == corev1.PersistentVolumeReclaimRetain {
 			break
 		}
@@ -79,7 +79,7 @@ func (p *PVController) SetVolumeAvailable(ctx context.Context, pvName *string) e
 	if pv, err, ok := p.IsPVExists(ctx, types.NamespacedName{
 		Namespace: corev1.NamespaceAll,
 		Name:      *pvName,
-	}); err == nil && ok {
+	}); err == nil && ok { // pv存在，将pv设置为可用
 		pv.Finalizers = nil
 		pv.Spec.ClaimRef = nil
 		pv.Status.Phase = corev1.VolumeAvailable
@@ -92,6 +92,7 @@ func (p *PVController) SetVolumeAvailable(ctx context.Context, pvName *string) e
 
 // 修改 pv 状态 防止资源修改冲突
 func (p *PVController) changePVStatus(ctx context.Context, pv *corev1.PersistentVolume) error {
+	// 循环等待，知道 pv状态为可用
 	for {
 		if err := p.Update(ctx, pv, client.DryRunAll); err == nil {
 			if err := p.Update(ctx, pv); err != nil {
@@ -99,6 +100,7 @@ func (p *PVController) changePVStatus(ctx context.Context, pv *corev1.Persistent
 			}
 			return nil
 		} else {
+			// 更新失败，重新拉取最新状态，然后更新
 			newPV, _, _ := p.IsPVExists(ctx, types.NamespacedName{
 				Namespace: pv.Namespace,
 				Name:      pv.Name,
