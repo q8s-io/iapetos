@@ -49,6 +49,7 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 	statefulPodLog := r.Log.WithValues("statefulpod", req.NamespacedName)
 	podLog := r.Log.WithValues("pod", req.NamespacedName)
 	pvcLog := r.Log.WithValues("pvc", req.NamespacedName)
+
 	var statefulPod statefulpodv1.StatefulPod
 	var pod corev1.Pod
 	var pvc corev1.PersistentVolumeClaim

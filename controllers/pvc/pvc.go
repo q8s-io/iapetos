@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -21,11 +22,15 @@ const (
 	Deleting    = "Deleting"
 )
 
-type PvcController struct {
+var (
+	pvcLog logr.Logger
+)
+
+type PvcService struct {
 	client.Client
 }
 
-type PvcContrlIntf interface {
+type PvcServiceIntf interface {
 	PvcTemplate(ctx context.Context, statefulpod *statefulpodv1.StatefulPod, pvcName string, index int) (*corev1.PersistentVolumeClaim, error)
 	CreatePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim) error
 	IsPvcExist(ctx context.Context, name types.NamespacedName) (*corev1.PersistentVolumeClaim, error, bool)
@@ -33,12 +38,13 @@ type PvcContrlIntf interface {
 	SetPvcName(statefulPod *statefulpodv1.StatefulPod, index int) string
 }
 
-func NewPvcController(client client.Client) PvcContrlIntf {
-	return &PvcController{client}
+func NewPvcService(client client.Client) PvcServiceIntf {
+	//pvcLog.WithName("pvc message")
+	return &PvcService{client}
 }
 
 // 创建 pvc 模板
-func (p *PvcController) PvcTemplate(ctx context.Context, statefulpod *statefulpodv1.StatefulPod, pvcName string, index int) (*corev1.PersistentVolumeClaim, error) {
+func (p *PvcService) PvcTemplate(ctx context.Context, statefulpod *statefulpodv1.StatefulPod, pvcName string, index int) (*corev1.PersistentVolumeClaim, error) {
 	return &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -65,7 +71,7 @@ func (p *PvcController) PvcTemplate(ctx context.Context, statefulpod *statefulpo
 }
 
 // 判断 pvc 是否存在
-func (p *PvcController) IsPvcExist(ctx context.Context, nameSpaceName types.NamespacedName) (*corev1.PersistentVolumeClaim, error, bool) {
+func (p *PvcService) IsPvcExist(ctx context.Context, nameSpaceName types.NamespacedName) (*corev1.PersistentVolumeClaim, error, bool) {
 	var pvc corev1.PersistentVolumeClaim
 	if err := p.Get(ctx, types.NamespacedName{
 		Namespace: nameSpaceName.Namespace,
@@ -74,29 +80,32 @@ func (p *PvcController) IsPvcExist(ctx context.Context, nameSpaceName types.Name
 		if client.IgnoreNotFound(err) == nil {
 			return nil, nil, false
 		}
+		pvcLog.Error(err, "get pvc error")
 		return nil, err, false
 	}
 	return &pvc, nil, true
 }
 
 // 创建 pvc
-func (p *PvcController) CreatePVC(ctx context.Context, createPvc *corev1.PersistentVolumeClaim) error {
+func (p *PvcService) CreatePVC(ctx context.Context, createPvc *corev1.PersistentVolumeClaim) error {
 	if err := p.Create(ctx, createPvc); err != nil {
+		//pvcLog.Error(err,"create pvc error")
 		return err
 	}
 	return nil
 }
 
 // 删除 pvc
-func (p *PvcController) DeletePVC(ctx context.Context, deletePVC *corev1.PersistentVolumeClaim) error {
+func (p *PvcService) DeletePVC(ctx context.Context, deletePVC *corev1.PersistentVolumeClaim) error {
 	if err := p.Delete(ctx, deletePVC); err != nil {
+		pvcLog.Error(err, "delete pvc error")
 		return err
 	}
 	return nil
 }
 
 // 设置 pvc name
-func (p *PvcController) SetPvcName(statefulPod *statefulpodv1.StatefulPod, index int) string {
+func (p *PvcService) SetPvcName(statefulPod *statefulpodv1.StatefulPod, index int) string {
 	if statefulPod.Spec.PvcTemplate == nil { // pvc 不需要创建，返回 none
 		return "none"
 	}

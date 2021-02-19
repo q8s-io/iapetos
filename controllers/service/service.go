@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -11,14 +12,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	statefulpodv1 "iapetos/api/v1"
+	"iapetos/tools"
 )
 
 const (
-	ParentNmae  = "parentName"
-	StatefulPod = "StatefulPod"
+	ParentNmae    = "parentName"
+	StatefulPod   = "StatefulPod"
+	FinalizerName = "kubernetes.io/service-protection"
 )
 
-type ServiceController struct {
+var (
+	serviceLog logr.Logger
+)
+
+type Service struct {
 	client.Client
 }
 
@@ -27,19 +34,22 @@ type ServiceIntf interface {
 	IsServiceExits(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Service, error, bool)
 	ServiceTemplate(statefulPod *statefulpodv1.StatefulPod) *corev1.Service
 	CreateService(ctx context.Context, service *corev1.Service) error
+	SetFinalizer(ctx context.Context, service *corev1.Service) error
 }
 
 func NewServiceContrl(client client.Client) ServiceIntf {
-	return &ServiceController{client}
+	//serviceLog.WithName("service mesasge")
+	return &Service{client}
 }
 
 // 判断 service 是否存在
-func (s *ServiceController) IsServiceExits(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Service, error, bool) {
+func (s *Service) IsServiceExits(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Service, error, bool) {
 	var service corev1.Service
 	if err := s.Get(ctx, namespaceName, &service); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			return nil, nil, false
 		}
+		serviceLog.Error(err, "get service error")
 		return nil, err, false
 	} else {
 		return &service, nil, true
@@ -47,7 +57,7 @@ func (s *ServiceController) IsServiceExits(ctx context.Context, namespaceName ty
 }
 
 // 创建 service 模板
-func (s *ServiceController) ServiceTemplate(statefulPod *statefulpodv1.StatefulPod) *corev1.Service {
+func (s *Service) ServiceTemplate(statefulPod *statefulpodv1.StatefulPod) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
@@ -73,14 +83,26 @@ func (s *ServiceController) ServiceTemplate(statefulPod *statefulpodv1.StatefulP
 }
 
 // 创建 service
-func (s *ServiceController) CreateService(ctx context.Context, service *corev1.Service) error {
+func (s *Service) CreateService(ctx context.Context, service *corev1.Service) error {
 	if err := s.Create(ctx, service); err != nil {
+		serviceLog.Error(err, "create service error")
 		return err
 	}
 	return nil
 }
 
 // 设置 service name
-func (s *ServiceController) SetServiceName(statefulPod *statefulpodv1.StatefulPod) string {
+func (s *Service) SetServiceName(statefulPod *statefulpodv1.StatefulPod) string {
 	return fmt.Sprintf("%v-%v", statefulPod.Name, "service")
+}
+
+func (s *Service) SetFinalizer(ctx context.Context, service *corev1.Service) error {
+	if !tools.ContainsString(service.Finalizers, FinalizerName) {
+		service.Finalizers = append(service.Finalizers, FinalizerName)
+		if err := s.Update(ctx, service); err != nil {
+			serviceLog.Error(err, "set finalizer error")
+			return err
+		}
+	}
+	return nil
 }

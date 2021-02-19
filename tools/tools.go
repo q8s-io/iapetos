@@ -27,3 +27,8 @@ func RemoveString(strArray []string, value string) []string {
 	}
 	return strArray
 }
+
+func IntToIntr32(index int) *int32 {
+	v := int32(index)
+	return &v
+}

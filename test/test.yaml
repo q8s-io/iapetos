@@ -19,7 +19,7 @@ spec:
           claimName: data
   serviceTemplate:
     selector:
-      app: v1
+      app: v141299420
       test: "true"
     clusterIP: None
     ports:

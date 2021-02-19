@@ -3,27 +3,33 @@ package pv
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type PVController struct {
+var (
+	pvLog logr.Logger
+)
+
+type PVService struct {
 	client.Client
 }
 
-type PVContrlIntf interface {
+type PVServiceIntf interface {
 	IsPVExists(ctx context.Context, namespaceName types.NamespacedName) (*corev1.PersistentVolume, error, bool)
 	SetPVRetain(ctx context.Context, pvName *string) error
 	SetVolumeAvailable(ctx context.Context, pvName *string) error
 }
 
-func NewPVController(client client.Client) PVContrlIntf {
-	return &PVController{client}
+func NewPVService(client client.Client) PVServiceIntf {
+	//pvLog.WithName("pv message")
+	return &PVService{client}
 }
 
 // 判断 pv 是否存在
-func (p *PVController) IsPVExists(ctx context.Context, namespaceName types.NamespacedName) (*corev1.PersistentVolume, error, bool) {
+func (p *PVService) IsPVExists(ctx context.Context, namespaceName types.NamespacedName) (*corev1.PersistentVolume, error, bool) {
 	var pv corev1.PersistentVolume
 	if err := p.Get(ctx, types.NamespacedName{
 		Namespace: namespaceName.Namespace,
@@ -32,13 +38,14 @@ func (p *PVController) IsPVExists(ctx context.Context, namespaceName types.Names
 		if client.IgnoreNotFound(err) == nil {
 			return nil, nil, false
 		}
+		pvLog.Error(err, "get pv error")
 		return nil, err, false
 	}
 	return &pv, nil, true
 }
 
 // 将 pv 的删除策略设置为 Retain
-func (p *PVController) SetPVRetain(ctx context.Context, pvName *string) error {
+func (p *PVService) SetPVRetain(ctx context.Context, pvName *string) error {
 	if pv, err, ok := p.IsPVExists(ctx, types.NamespacedName{
 		Namespace: corev1.NamespaceAll,
 		Name:      *pvName,
@@ -48,13 +55,16 @@ func (p *PVController) SetPVRetain(ctx context.Context, pvName *string) error {
 		if err := p.updatePV(ctx, pv); err != nil { // 修改 pv状态，即设置 pv的删除策略为回收
 			return err
 		}
+	} else if err != nil {
+		return err
 	}
 	return nil
 }
 
 // 等待将 pv 的回收策略设置为 Retain
-func (p *PVController) updatePV(ctx context.Context, pv *corev1.PersistentVolume) error {
+func (p *PVService) updatePV(ctx context.Context, pv *corev1.PersistentVolume) error {
 	if err := p.Update(ctx, pv); err != nil {
+		//pvLog.Error(err,"set pv retain error")
 		return err
 	}
 	// 循环等待，知道pv的删除策略成功设置为回收
@@ -75,7 +85,7 @@ func (p *PVController) updatePV(ctx context.Context, pv *corev1.PersistentVolume
 }
 
 // 将 pv 状态设置为 Available
-func (p *PVController) SetVolumeAvailable(ctx context.Context, pvName *string) error {
+func (p *PVService) SetVolumeAvailable(ctx context.Context, pvName *string) error {
 	if pv, err, ok := p.IsPVExists(ctx, types.NamespacedName{
 		Namespace: corev1.NamespaceAll,
 		Name:      *pvName,
@@ -86,16 +96,19 @@ func (p *PVController) SetVolumeAvailable(ctx context.Context, pvName *string) e
 		if err := p.changePVStatus(ctx, pv); err != nil {
 			return err
 		}
+	} else if err != nil {
+		return err
 	}
 	return nil
 }
 
 // 修改 pv 状态 防止资源修改冲突
-func (p *PVController) changePVStatus(ctx context.Context, pv *corev1.PersistentVolume) error {
+func (p *PVService) changePVStatus(ctx context.Context, pv *corev1.PersistentVolume) error {
 	// 循环等待，知道 pv状态为可用
 	for {
 		if err := p.Update(ctx, pv, client.DryRunAll); err == nil {
 			if err := p.Update(ctx, pv); err != nil {
+				pvLog.Error(err, "change pv status error")
 				return err
 			}
 			return nil
