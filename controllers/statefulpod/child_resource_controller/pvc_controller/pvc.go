@@ -2,14 +2,14 @@ package pvc_controller
 
 import (
 	"context"
+	"fmt"
 
+	statefulpodv1 "iapetos/api/v1"
+	pvcservice "iapetos/services/pvc"
+	"iapetos/tools"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	statefulpodv1 "iapetos/api/v1"
-	pvcservice "iapetos/controllers/pvc"
-	"iapetos/tools"
 )
 
 type PvcController struct {
@@ -27,16 +27,17 @@ func NewPvcController(client client.Client) PvcContrlIntf {
 }
 
 func (pvcctrl *PvcController) ExpansionPvc(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) (*statefulpodv1.PvcStatus, error) {
-	pvchandler := pvcservice.NewPvcService(pvcctrl.Client)
-	pvcName := pvchandler.SetPvcName(statefulPod, index)
-	if _, err, ok := pvchandler.IsPvcExist(ctx, types.NamespacedName{
+	pvcHandler := pvcservice.NewPvcService(pvcctrl.Client)
+	pvcName := pvcHandler.SetPvcName(statefulPod, index)
+	if _, err, ok := pvcHandler.IsPvcExist(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      pvcName,
 	}); err == nil && !ok { // pvc 不存在。创建 pvc
-		pvcTemplate, _ := pvchandler.PvcTemplate(ctx, statefulPod, pvcName, index)
-		if err := pvchandler.CreatePVC(ctx, pvcTemplate); err != nil {
+		pvcTemplate, _ := pvcHandler.PvcTemplate(ctx, statefulPod, pvcName, index)
+		if err := pvcHandler.CreatePVC(ctx, pvcTemplate); err != nil {
 			return nil, err
 		}
+		fmt.Println("-----------create pvc successful")
 		pvcStatus := &statefulpodv1.PvcStatus{
 			Index:        tools.IntToIntr32(index),
 			PvcName:      pvcName,
@@ -54,16 +55,16 @@ func (pvcctrl *PvcController) ExpansionPvc(ctx context.Context, statefulPod *sta
 }
 
 func (pvcctrl *PvcController) ShrinkPvc(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) (bool, error) {
-	pvchandler := pvcservice.NewPvcService(pvcctrl.Client)
-	pvcName := pvchandler.SetPvcName(statefulPod, index-1)
-	if pvc, err, ok := pvchandler.IsPvcExist(ctx, types.NamespacedName{
+	pvcHandler := pvcservice.NewPvcService(pvcctrl.Client)
+	pvcName := pvcHandler.SetPvcName(statefulPod, index-1)
+	if pvc, err, ok := pvcHandler.IsPvcExist(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      pvcName,
 	}); err == nil && ok { // pvc 存在，删除 pvc
 		if !pvc.DeletionTimestamp.IsZero() { // pvc 正在删除
 			return false, nil
 		}
-		if err := pvchandler.DeletePVC(ctx, pvc); err != nil {
+		if err := pvcHandler.DeletePVC(ctx, pvc); err != nil {
 			return false, err
 		}
 	} else if err == nil && !ok {
@@ -76,6 +77,9 @@ func (pvcctrl *PvcController) ShrinkPvc(ctx context.Context, statefulPod *statef
 }
 
 func (pvcctrl *PvcController) MonitorPVCStatus(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, pvc *corev1.PersistentVolumeClaim, index int) bool {
+	if index >= len(statefulPod.Status.PvcStatusMes) {
+		return false
+	}
 	if !pvc.DeletionTimestamp.IsZero() {
 		if statefulPod.Status.PvcStatusMes[index].Status == pvcservice.Deleting {
 			return false

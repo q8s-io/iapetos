@@ -5,7 +5,7 @@ metadata:
   namespace: ldy
 spec:
   pvRecyclePolicy: "Retain"
-  size: 3
+  size: 2
   podTemplate:
     containers:
       - name: test
@@ -32,3 +32,6 @@ spec:
     resources:
       requests:
         storage: 1Gi
+  pvNames:
+    - pvc-49589451-a2ce-437e-a44e-427705f958d2
+    - pvc-833b1ca2-8391-4299-8c91-a9f9356ead19

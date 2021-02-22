@@ -6,26 +6,28 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
 
-var (
-	pvLog logr.Logger
+	nodeservice "iapetos/services/node"
 )
 
 type PVService struct {
 	client.Client
+	Log logr.Logger
 }
 
 type PVServiceIntf interface {
 	IsPVExists(ctx context.Context, namespaceName types.NamespacedName) (*corev1.PersistentVolume, error, bool)
 	SetPVRetain(ctx context.Context, pvName *string) error
 	SetVolumeAvailable(ctx context.Context, pvName *string) error
+	//SetPvclaimRef(ctx context.Context,pv *corev1.PersistentVolume,nameSpaceName types.NamespacedName)error
+	IsPVCanUse(ctx context.Context, pvName string) (*corev1.PersistentVolume, bool)
 }
 
 func NewPVService(client client.Client) PVServiceIntf {
 	//pvLog.WithName("pv message")
-	return &PVService{client}
+	return &PVService{client, ctrl.Log.WithName("controllers").WithName("pv")}
 }
 
 // 判断 pv 是否存在
@@ -38,7 +40,7 @@ func (p *PVService) IsPVExists(ctx context.Context, namespaceName types.Namespac
 		if client.IgnoreNotFound(err) == nil {
 			return nil, nil, false
 		}
-		pvLog.Error(err, "get pv error")
+		p.Log.Error(err, "get pv error")
 		return nil, err, false
 	}
 	return &pv, nil, true
@@ -108,7 +110,7 @@ func (p *PVService) changePVStatus(ctx context.Context, pv *corev1.PersistentVol
 	for {
 		if err := p.Update(ctx, pv, client.DryRunAll); err == nil {
 			if err := p.Update(ctx, pv); err != nil {
-				pvLog.Error(err, "change pv status error")
+				p.Log.Error(err, "change pv status error")
 				return err
 			}
 			return nil
@@ -128,4 +130,34 @@ func (p *PVService) changePVStatus(ctx context.Context, pv *corev1.PersistentVol
 		}
 	}
 	return nil
+}
+
+func (p *PVService) SetPvclaimRef(ctx context.Context, pv *corev1.PersistentVolume, nameSpaceName types.NamespacedName) error {
+	pv.Spec.StorageClassName = ""
+	pv.Spec.ClaimRef.Namespace = nameSpaceName.Namespace
+	pv.Spec.ClaimRef.Name = nameSpaceName.Name
+	if err := p.Client.Update(ctx, pv); err != nil {
+		p.Log.Error(err, "change pv claimref error: ")
+		return err
+	}
+	return nil
+}
+
+func (p *PVService) IsPVCanUse(ctx context.Context, pvName string) (*corev1.PersistentVolume, bool) {
+	nodeHandler := nodeservice.NewNodeService(p.Client)
+	if pv, err, ok := p.IsPVExists(ctx, types.NamespacedName{
+		Namespace: corev1.NamespaceAll,
+		Name:      pvName,
+	}); err == nil && ok {
+		var nodeName string
+		if name, ok := pv.Annotations["kubevirt.io/provisionOnNode"]; ok {
+			nodeName = name
+		} else {
+			return nil, false
+		}
+		if nodeHandler.IsNodeReady(ctx, nodeName) {
+			return pv, true
+		}
+	}
+	return nil, false
 }

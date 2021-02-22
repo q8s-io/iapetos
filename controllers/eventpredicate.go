@@ -7,7 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	statefulpodv1 "iapetos/api/v1"
-	podcontrl "iapetos/controllers/pod"
+	podcontrl "iapetos/services/pod"
 )
 
 type StatefulPodPredicate struct {

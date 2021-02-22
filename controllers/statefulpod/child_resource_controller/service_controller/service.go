@@ -7,7 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	statefulpodv1 "iapetos/api/v1"
-	servicehandle "iapetos/controllers/service"
+	servicehandle "iapetos/services/service"
 )
 
 type ServiceController struct {
@@ -24,19 +24,19 @@ func NewServiceController(client client.Client) ServiceContrlIntf {
 }
 
 func (servicectl *ServiceController) CreateService(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) (bool, error) {
-	servicehandler := servicehandle.NewServiceContrl(servicectl.Client)
-	serviceName := servicehandler.SetServiceName(statefulPod)
-	if service, err, ok := servicehandler.IsServiceExits(ctx, types.NamespacedName{
+	serviceable := servicehandle.NewServiceContrl(servicectl.Client)
+	serviceName := serviceable.SetServiceName(statefulPod)
+	if service, err, ok := serviceable.IsServiceExits(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      serviceName,
 	}); err == nil && !ok { // service 不存在 ,创建 service
-		serviceTemplate := servicehandler.ServiceTemplate(statefulPod)
-		if err := servicehandler.CreateService(ctx, serviceTemplate); err != nil {
+		serviceTemplate := serviceable.ServiceTemplate(statefulPod)
+		if err := serviceable.CreateService(ctx, serviceTemplate); err != nil {
 			return false, err
 		}
 	} else if err == nil && ok {
 		// service创建成功，设置finalizer防止误删
-		if err := servicehandler.SetFinalizer(ctx, service); err != nil {
+		if err := serviceable.SetFinalizer(ctx, service); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -47,9 +47,9 @@ func (servicectl *ServiceController) CreateService(ctx context.Context, stateful
 }
 
 func (servicectl *ServiceController) RemoveServiceFinalizer(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
-	servicehandler := servicehandle.NewServiceContrl(servicectl.Client)
-	serviceName := servicehandler.SetServiceName(statefulPod)
-	if service, err, ok := servicehandler.IsServiceExits(ctx, types.NamespacedName{
+	serviceable := servicehandle.NewServiceContrl(servicectl.Client)
+	serviceName := serviceable.SetServiceName(statefulPod)
+	if service, err, ok := serviceable.IsServiceExits(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      serviceName,
 	}); err == nil && ok { // service 存在 ,清空 finalizer

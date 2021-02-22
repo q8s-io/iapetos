@@ -23,7 +23,7 @@ type StatefulPodController struct {
 }
 
 type StatefulPodContrlInf interface {
-	StatefulPodContrl(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error
+	StatefulPodCtrl(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error
 	MonitorPodStatus(ctx context.Context, pod *corev1.Pod) error
 	MonitorPVCStatus(ctx context.Context, pvc *corev1.PersistentVolumeClaim) error
 }
@@ -36,7 +36,26 @@ func NewStatefulPodController(client client.Client) StatefulPodContrlInf {
 // 若 len(statefulPod.Status.PodStatusMes) < int(*statefulPod.Spec.Size) 扩容
 // 若 len(statefulPod.Status.PodStatusMes) > int(*statefulPod.Spec.Size) 缩容
 // 若 len(statefulPod.Status.PodStatusMes) == int(*statefulPod.Spec.Size) 设置Finalizer,维护
-func (s *StatefulPodController) StatefulPodContrl(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
+func (s *StatefulPodController) StatefulPodCtrl(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
+	if !statefulPod.DeletionTimestamp.IsZero() {
+		myFinalizerName := statefulpodv1.GroupVersion.String()
+		// 删除 statefulPod
+		if tools.ContainsString(statefulPod.Finalizers, myFinalizerName) {
+			// 删除 pod ，pvc
+			if err := podcontrl.NewPodController(s.Client).DeletePodAll(ctx, statefulPod); err != nil {
+				return err
+			}
+			// 一处 service 的 finalizer
+			if err := servicecontrl.NewServiceController(s.Client).RemoveServiceFinalizer(ctx, statefulPod); err != nil {
+				return err
+			}
+			statefulPod.Finalizers = tools.RemoveString(statefulPod.Finalizers, myFinalizerName)
+			if err := s.changeStatefulPod(ctx, statefulPod, 0); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	lenStatus := len(statefulPod.Status.PodStatusMes)
 	if lenStatus < int(*statefulPod.Spec.Size) {
 		return s.expansion(ctx, statefulPod, lenStatus)
@@ -77,8 +96,8 @@ func (s *StatefulPodController) changeStatefulPod(ctx context.Context, statefulP
 
 // 维护pod状态
 func (s *StatefulPodController) maintain(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
-	podctl := podcontrl.NewPodController(s.Client)
-	if index := podctl.MaintainPod(ctx, statefulPod); index != nil {
+	podCtrl := podcontrl.NewPodController(s.Client)
+	if index := podCtrl.MaintainPod(ctx, statefulPod); index != nil {
 		return s.expansion(ctx, statefulPod, *index)
 	}
 	return nil
@@ -90,28 +109,28 @@ func (s *StatefulPodController) maintain(ctx context.Context, statefulPod *state
 // 若 index == len(statefulPod.Status.PodStatusMes) 代表创建
 // 若 index != len(statefulPod.Status.PodStatusMes) 代表维护
 func (s *StatefulPodController) expansion(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) error {
-	servicectl := servicecontrl.NewServiceController(s.Client)
-	podctl := podcontrl.NewPodController(s.Client)
-	pvcctl := pvccontrl.NewPvcController(s.Client)
-	var podstatus *statefulpodv1.PodStatus
-	var pvcstatus *statefulpodv1.PvcStatus
+	serviceCtrl := servicecontrl.NewServiceController(s.Client)
+	podCtrl := podcontrl.NewPodController(s.Client)
+	pvcCtrl := pvccontrl.NewPvcController(s.Client)
+	var podStatus *statefulpodv1.PodStatus
+	var pvcStatus *statefulpodv1.PvcStatus
 	var err error
 	if index == 0 && statefulPod.Spec.ServiceTemplate != nil { // 索引为 0，且需要生成 service
-		if ok, err := servicectl.CreateService(ctx, statefulPod); err != nil {
+		if ok, err := serviceCtrl.CreateService(ctx, statefulPod); err != nil {
 			return err
 		} else if !ok { // service 未创建
 			return nil
 		}
 	}
-	if podstatus, err = podctl.ExpansionPod(ctx, statefulPod, index); err != nil {
+	if podStatus, err = podCtrl.ExpansionPod(ctx, statefulPod, index); err != nil {
 		return err
 	}
 	if statefulPod.Spec.PvcTemplate != nil {
-		if pvcstatus, err = pvcctl.ExpansionPvc(ctx, statefulPod, index); err != nil {
+		if pvcStatus, err = pvcCtrl.ExpansionPvc(ctx, statefulPod, index); err != nil {
 			return err
 		}
 	} else {
-		pvcstatus = &statefulpodv1.PvcStatus{
+		pvcStatus = &statefulpodv1.PvcStatus{
 			Index:       tools.IntToIntr32(index),
 			PvcName:     "none",
 			Status:      "",
@@ -119,25 +138,25 @@ func (s *StatefulPodController) expansion(ctx context.Context, statefulPod *stat
 		}
 	}
 	if len(statefulPod.Status.PodStatusMes) == index {
-		statefulPod.Status.PodStatusMes = append(statefulPod.Status.PodStatusMes, *podstatus)
-		statefulPod.Status.PvcStatusMes = append(statefulPod.Status.PvcStatusMes, *pvcstatus)
+		statefulPod.Status.PodStatusMes = append(statefulPod.Status.PodStatusMes, *podStatus)
+		statefulPod.Status.PvcStatusMes = append(statefulPod.Status.PvcStatusMes, *pvcStatus)
 	} else {
-		statefulPod.Status.PodStatusMes[index] = *podstatus
-		statefulPod.Status.PvcStatusMes[index] = *pvcstatus
+		statefulPod.Status.PodStatusMes[index] = *podStatus
+		statefulPod.Status.PvcStatusMes[index] = *pvcStatus
 	}
 	return s.changeStatefulPod(ctx, statefulPod, index)
 }
 
 // 缩容 若pvc存在 ,删除pvc
 func (s *StatefulPodController) shrink(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) error {
-	podctl := podcontrl.NewPodController(s.Client)
-	pvcctl := pvccontrl.NewPvcController(s.Client)
-	if ok, err := podctl.ShrinkPod(ctx, statefulPod, index); err != nil {
+	podCtrl := podcontrl.NewPodController(s.Client)
+	pvcCtrl := pvccontrl.NewPvcController(s.Client)
+	if ok, err := podCtrl.ShrinkPod(ctx, statefulPod, index); err != nil {
 		return err
 	} else if !ok {
 		return nil
 	} // 判断 pod 是否删除完毕
-	if ok, err := pvcctl.ShrinkPvc(ctx, statefulPod, index); err != nil {
+	if ok, err := pvcCtrl.ShrinkPvc(ctx, statefulPod, index); err != nil {
 		return err
 	} else if !ok {
 		return nil
@@ -165,22 +184,6 @@ func (s *StatefulPodController) setFinalizer(ctx context.Context, statefulPod *s
 	if statefulPod.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !tools.ContainsString(statefulPod.Finalizers, myFinalizerName) { // finalizer未设置，则添加finalizer
 			statefulPod.Finalizers = append(statefulPod.Finalizers, myFinalizerName)
-			if err := s.changeStatefulPod(ctx, statefulPod, 0); err != nil {
-				return err
-			}
-		}
-	} else {
-		// 删除 statefulPod
-		if tools.ContainsString(statefulPod.Finalizers, myFinalizerName) {
-			// 删除 pod ，pvc
-			if err := podcontrl.NewPodController(s.Client).DeletePodAll(ctx, statefulPod); err != nil {
-				return err
-			}
-			// 一处 service 的 finalizer
-			if err := servicecontrl.NewServiceController(s.Client).RemoveServiceFinalizer(ctx, statefulPod); err != nil {
-				return err
-			}
-			statefulPod.Finalizers = tools.RemoveString(statefulPod.Finalizers, myFinalizerName)
 			if err := s.changeStatefulPod(ctx, statefulPod, 0); err != nil {
 				return err
 			}

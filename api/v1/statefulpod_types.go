@@ -35,6 +35,7 @@ type StatefulPodSpec struct {
 	ServiceTemplate *corev1.ServiceSpec                  `json:"serviceTemplate,omitempty"`
 	PodTemplate     corev1.PodSpec                       `json:"podTemplate"`
 	PvcTemplate     *corev1.PersistentVolumeClaimSpec    `json:"pvcTemplate,omitempty"`
+	PVNames         []string                             `json:"pvNames,omitempty"`
 }
 
 // StatefulPodStatus defines the observed state of StatefulPod

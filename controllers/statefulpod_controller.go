@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	statefulpodv1 "iapetos/api/v1"
@@ -43,7 +44,10 @@ type StatefulPodReconciler struct {
 
 // +kubebuilder:rbac:groups=bdg.iapetos.foundary-cloud.io,resources=statefulpods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=bdg.iapetos.foundary-cloud.io,resources=statefulpods/status,verbs=get;update;patch
-
+// +kubebuilder:rbac:groups=core,resources=persistentvolume,verbs=get
+// +kubebuilder:rbac:groups=core,resources=persistentvolume/status,verbs=get
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/status,verbs=get
 func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	statefulPodLog := r.Log.WithValues("statefulpod", req.NamespacedName)
@@ -54,14 +58,15 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 	var pod corev1.Pod
 	var pvc corev1.PersistentVolumeClaim
 	// statefulPod
-
+	/*	fmt.Println(time.Now().Format("2006-01-02 15:04:05"))
+		time.Sleep(time.Second*2)*/
 	if err := r.Get(ctx, req.NamespacedName, &statefulPod); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			statefulPodLog.Error(err, "unable to fetch statefulPod")
 			return ctrl.Result{}, err
 		}
 	} else {
-		if err := statefulpodcontrl.NewStatefulPodController(r.Client).StatefulPodContrl(ctx, &statefulPod); err != nil {
+		if err := statefulpodcontrl.NewStatefulPodController(r.Client).StatefulPodCtrl(ctx, &statefulPod); err != nil {
 			statefulPodLog.Error(err, "handle statefulPod error")
 			return ctrl.Result{}, err
 		}
@@ -84,7 +89,7 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 	// PVC
 	if err := r.Get(ctx, req.NamespacedName, &pvc); err != nil {
 		if client.IgnoreNotFound(err) != nil {
-			podLog.Error(err, "unable to fetch pvc")
+			pvcLog.Error(err, "unable to fetch pvc")
 			return ctrl.Result{}, err
 		}
 	} else {
@@ -98,9 +103,14 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 }
 
 func (r *StatefulPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	//ctrl:=&controller.Options{MaxConcurrentReconciles: 10}
 	return ctrl.NewControllerManagedBy(mgr).For(&statefulpodv1.StatefulPod{}).
 		Watches(&source.Kind{Type: &corev1.Pod{}}, &StatefulPodEvent{}).
 		Watches(&source.Kind{Type: &corev1.PersistentVolumeClaim{}}, &StatefulPodEvent{}).
 		WithEventFilter(StatefulPodPredicate{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 3,
+			//Reconciler:              &StatefulPodReconciler{},
+		}).
 		Complete(r)
 }

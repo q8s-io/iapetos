@@ -9,10 +9,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	statefulpodv1 "iapetos/api/v1"
-	pvcservice "iapetos/controllers/pvc"
+	pvservice "iapetos/services/pv"
+	pvcservice "iapetos/services/pvc"
 	"iapetos/tools"
 )
 
@@ -24,12 +26,9 @@ const (
 	Index       = "index"
 )
 
-var (
-	podLog logr.Logger
-)
-
 type PodService struct {
 	client.Client
+	Log logr.Logger
 }
 
 type PodServiceIntf interface {
@@ -43,7 +42,7 @@ type PodServiceIntf interface {
 
 func NewPodService(client client.Client) PodServiceIntf {
 	//podLog.WithName("pod message")
-	return &PodService{client}
+	return &PodService{client, ctrl.Log.WithName("controllers").WithName("pod")}
 }
 
 // 判断 pod 是否存在
@@ -53,7 +52,7 @@ func (p *PodService) IsPodExist(ctx context.Context, namespaceName types.Namespa
 		if client.IgnoreNotFound(err) == nil { // 找不到改pod
 			return nil, nil, false
 		}
-		podLog.Error(err, "get pod error")
+		p.Log.Error(err, "get pod error")
 		return nil, err, false
 	} else {
 		return &pod, nil, true
@@ -62,6 +61,13 @@ func (p *PodService) IsPodExist(ctx context.Context, namespaceName types.Namespa
 
 // 创建 pod 模板
 func (p *PodService) PodTempale(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, podName string, index int) *corev1.Pod {
+	pvHandler := pvservice.NewPVService(p.Client)
+	if len(statefulPod.Spec.PVNames) != 0 && len(statefulPod.Spec.PVNames) > index {
+		if pv, ok := pvHandler.IsPVCanUse(ctx, statefulPod.Spec.PVNames[index]); ok {
+			nodeName := pv.Annotations["kubevirt.io/provisionOnNode"]
+			statefulPod.Spec.PodTemplate.NodeName = nodeName
+		}
+	}
 	pod := corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
@@ -85,7 +91,7 @@ func (p *PodService) PodTempale(ctx context.Context, statefulPod *statefulpodv1.
 		},
 		Spec: *statefulPod.Spec.PodTemplate.DeepCopy(),
 	}
-	// 判断 pvc 是否需要创建
+	// TODO 判断 pvc 是否需要创建 只支持挂载一个pvc
 	if statefulPod.Spec.PvcTemplate != nil {
 		pod.Spec.Volumes[0].PersistentVolumeClaim.ClaimName = pvcservice.NewPvcService(p.Client).SetPvcName(statefulPod, index)
 	}
@@ -119,7 +125,7 @@ func (p *PodService) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 func (p *PodService) DeletePodMandatory(ctx context.Context, pod *corev1.Pod, statefulPod *statefulpodv1.StatefulPod) error {
 	pvchandler := pvcservice.NewPvcService(p.Client)
 	if err := p.Delete(ctx, pod, client.DeleteOption(client.GracePeriodSeconds(0)), client.DeleteOption(client.PropagationPolicy(metav1.DeletePropagationBackground))); err != nil {
-		podLog.Error(err, "delete pod mandatory error")
+		p.Log.Error(err, "delete pod mandatory error")
 		return err
 	}
 	if statefulPod.Spec.PvcTemplate != nil {

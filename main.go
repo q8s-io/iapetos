@@ -77,7 +77,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "StatefulPod")
 		os.Exit(1)
 	}
-	// +kubebuilder:scaffold:builder
+	// n+kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
