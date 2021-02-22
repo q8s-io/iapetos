@@ -28,8 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	statefulpodv1 "iapetos/api/v1"
-	statefulpodcontrl "iapetos/controllers/statefulpod"
+	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
+	statefulpodcontrl "github.com/q8s-io/iapetos/controllers/statefulpod"
 )
 
 // StatefulPodReconciler reconciles a StatefulPod object

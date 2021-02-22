@@ -10,7 +10,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	resourcecfg "iapetos/initconfig"
+	resourcecfg "github.com/q8s-io/iapetos/initconfig"
 )
 
 type NodeService struct {

@@ -1,4 +1,4 @@
-module iapetos
+module github.com/q8s-io/iapetos
 
 go 1.13
 

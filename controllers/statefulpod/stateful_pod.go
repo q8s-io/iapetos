@@ -7,11 +7,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	statefulpodv1 "iapetos/api/v1"
-	podcontrl "iapetos/controllers/statefulpod/child_resource_controller/pod_controller"
-	pvccontrl "iapetos/controllers/statefulpod/child_resource_controller/pvc_controller"
-	servicecontrl "iapetos/controllers/statefulpod/child_resource_controller/service_controller"
-	"iapetos/tools"
+	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
+	podcontrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pod_controller"
+	pvccontrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pvc_controller"
+	servicecontrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/service_controller"
+	"github.com/q8s-io/iapetos/tools"
 )
 
 const (

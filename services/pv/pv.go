@@ -9,7 +9,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	nodeservice "iapetos/services/node"
+	nodeservice "github.com/q8s-io/iapetos/services/node"
 )
 
 type PVService struct {

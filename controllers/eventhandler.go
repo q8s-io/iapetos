@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	statefulpodv1 "iapetos/api/v1"
+	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
 )
 
 const StatefulPod = "StatefulPod"

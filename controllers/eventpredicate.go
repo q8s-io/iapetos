@@ -6,8 +6,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
-	statefulpodv1 "iapetos/api/v1"
-	podcontrl "iapetos/services/pod"
+	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
+	podcontrl "github.com/q8s-io/iapetos/services/pod"
 )
 
 type StatefulPodPredicate struct {

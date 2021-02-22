@@ -9,12 +9,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	statefulpodv1 "iapetos/api/v1"
-	resourcecfg "iapetos/initconfig"
-	nodeservice "iapetos/services/node"
-	podservice "iapetos/services/pod"
-	pvservice "iapetos/services/pv"
-	pvcservice "iapetos/services/pvc"
+	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
+	resourcecfg "github.com/q8s-io/iapetos/initconfig"
+	nodeservice "github.com/q8s-io/iapetos/services/node"
+	podservice "github.com/q8s-io/iapetos/services/pod"
+	pvservice "github.com/q8s-io/iapetos/services/pv"
+	pvcservice "github.com/q8s-io/iapetos/services/pvc"
 )
 
 type PodController struct {

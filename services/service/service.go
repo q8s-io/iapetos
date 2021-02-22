@@ -12,8 +12,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	statefulpodv1 "iapetos/api/v1"
-	"iapetos/tools"
+	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
+	"github.com/q8s-io/iapetos/tools"
 )
 
 const (

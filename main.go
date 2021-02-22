@@ -28,9 +28,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	iapetosfoundarycloudiov1 "iapetos/api/v1"
-	"iapetos/controllers"
-	_ "iapetos/initconfig"
+	iapetosfoundarycloudiov1 "github.com/q8s-io/iapetos/api/v1"
+	"github.com/q8s-io/iapetos/controllers"
+	_ "github.com/q8s-io/iapetos/initconfig"
 	// +kubebuilder:scaffold:imports
 )
 

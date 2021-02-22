@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	statefulpodv1 "iapetos/api/v1"
-	pvcservice "iapetos/services/pvc"
-	"iapetos/tools"
+	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
+	pvcservice "github.com/q8s-io/iapetos/services/pvc"
+	"github.com/q8s-io/iapetos/tools"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"

@@ -12,10 +12,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	statefulpodv1 "iapetos/api/v1"
-	pvservice "iapetos/services/pv"
-	pvcservice "iapetos/services/pvc"
-	"iapetos/tools"
+	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
+	pvservice "github.com/q8s-io/iapetos/services/pv"
+	pvcservice "github.com/q8s-io/iapetos/services/pvc"
+	"github.com/q8s-io/iapetos/tools"
 )
 
 const (

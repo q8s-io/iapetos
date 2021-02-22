@@ -6,8 +6,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	statefulpodv1 "iapetos/api/v1"
-	servicehandle "iapetos/services/service"
+	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
+	servicehandle "github.com/q8s-io/iapetos/services/service"
 )
 
 type ServiceController struct {
