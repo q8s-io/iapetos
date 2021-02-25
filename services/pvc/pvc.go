@@ -117,5 +117,8 @@ func (p *PvcService) SetPvcName(statefulPod *statefulpodv1.StatefulPod, index in
 	if statefulPod.Spec.PvcTemplate == nil { // pvc 不需要创建，返回 none
 		return "none"
 	}
+	if statefulPod.Spec.PodTemplate.Volumes[0].PersistentVolumeClaim.ClaimName == "" {
+		statefulPod.Spec.PodTemplate.Volumes[0].PersistentVolumeClaim.ClaimName = "data"
+	}
 	return fmt.Sprintf("%v-%v-%v", statefulPod.Spec.PodTemplate.Volumes[0].PersistentVolumeClaim.ClaimName, statefulPod.Name, index)
 }

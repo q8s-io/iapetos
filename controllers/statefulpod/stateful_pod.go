@@ -37,6 +37,7 @@ func NewStatefulPodController(client client.Client) StatefulPodContrlInf {
 // 若 len(statefulPod.Status.PodStatusMes) > int(*statefulPod.Spec.Size) 缩容
 // 若 len(statefulPod.Status.PodStatusMes) == int(*statefulPod.Spec.Size) 设置Finalizer,维护
 func (s *StatefulPodController) StatefulPodCtrl(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
+	lenStatus := len(statefulPod.Status.PodStatusMes)
 	if !statefulPod.DeletionTimestamp.IsZero() {
 		myFinalizerName := statefulpodv1.GroupVersion.String()
 		// 删除 statefulPod
@@ -56,7 +57,6 @@ func (s *StatefulPodController) StatefulPodCtrl(ctx context.Context, statefulPod
 		}
 		return nil
 	}
-	lenStatus := len(statefulPod.Status.PodStatusMes)
 	if lenStatus < int(*statefulPod.Spec.Size) {
 		return s.expansion(ctx, statefulPod, lenStatus)
 	} else if lenStatus > int(*statefulPod.Spec.Size) {
