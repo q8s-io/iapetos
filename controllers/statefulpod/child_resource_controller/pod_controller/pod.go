@@ -37,7 +37,7 @@ func NewPodController(client client.Client) PodContrlIntf {
 func (podctrl *PodController) ExpansionPod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) (*statefulpodv1.PodStatus, error) {
 	podHandler := podservice.NewPodService(podctrl.Client)
 	podIndex := int32(index)
-	podName := fmt.Sprintf("%v%v", statefulPod.Name, index)
+	podName := fmt.Sprintf("%v-%v", statefulPod.Name, index)
 	if _, err, ok := podHandler.IsPodExist(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      podName,
@@ -62,7 +62,7 @@ func (podctrl *PodController) ExpansionPod(ctx context.Context, statefulPod *sta
 
 // 缩容 pod
 func (podctrl *PodController) ShrinkPod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) (bool, error) {
-	podName := fmt.Sprintf("%v%v", statefulPod.Name, index-1)
+	podName := fmt.Sprintf("%v-%v", statefulPod.Name, index-1)
 	podHandler := podservice.NewPodService(podctrl.Client)
 	if pod, err, ok := podHandler.IsPodExist(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,

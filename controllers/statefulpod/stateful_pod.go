@@ -109,6 +109,11 @@ func (s *StatefulPodController) maintain(ctx context.Context, statefulPod *state
 // 若 index == len(statefulPod.Status.PodStatusMes) 代表创建
 // 若 index != len(statefulPod.Status.PodStatusMes) 代表维护
 func (s *StatefulPodController) expansion(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) error {
+	defer func() {
+		if recover()!=nil{
+			return
+		}
+	}()
 	serviceCtrl := servicecontrl.NewServiceController(s.Client)
 	podCtrl := podcontrl.NewPodController(s.Client)
 	pvcCtrl := pvccontrl.NewPvcController(s.Client)

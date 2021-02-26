@@ -15,6 +15,7 @@ import (
 	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
 	pvservice "github.com/q8s-io/iapetos/services/pv"
 	pvcservice "github.com/q8s-io/iapetos/services/pvc"
+	"github.com/q8s-io/iapetos/services/service"
 	"github.com/q8s-io/iapetos/tools"
 )
 
@@ -91,14 +92,30 @@ func (p *PodService) PodTempale(ctx context.Context, statefulPod *statefulpodv1.
 		},
 		Spec: *statefulPod.Spec.PodTemplate.DeepCopy(),
 	}
+	// 添加 hostname subdomain 用于dns发现
+	pod.Spec.Hostname=podName
 	// TODO 判断 pvc 是否需要创建 只支持挂载一个pvc
 	if statefulPod.Spec.PvcTemplate != nil {
 		pod.Spec.Volumes[0].PersistentVolumeClaim.ClaimName = pvcservice.NewPvcService(p.Client).SetPvcName(statefulPod, index)
 	}
+	lables:=map[string]string{}
 	// 判断 service 是否需要创建，若需要则将标签自动打上
 	if statefulPod.Spec.ServiceTemplate != nil {
-		pod.Labels = statefulPod.Spec.ServiceTemplate.Selector
+		pod.Spec.Subdomain=service.NewServiceContrl(p.Client).SetServiceName(statefulPod)
+		for k,v:=range statefulPod.Spec.ServiceTemplate.Selector{
+			if _,ok:=lables[k];!ok{
+				lables[k]=v
+			}
+		}
 	}
+	if statefulPod.Spec.Selector!=nil{
+		for k,v:=range statefulPod.Spec.Selector.MatchLabels{
+			if _,ok:=lables[k];!ok{
+				lables[k]=v
+			}
+		}
+	}
+	pod.Labels=lables
 	return &pod
 }
 
