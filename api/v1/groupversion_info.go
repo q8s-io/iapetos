@@ -16,7 +16,7 @@ limitations under the License.
 
 // Package v1 contains API Schema definitions for the iapetos.foundary-cloud.io v1 API group
 // +kubebuilder:object:generate=true
-// +groupName=iapetos.foundary-cloud.io.iapetos.foundary-cloud.io
+// +groupName=iapetos.foundary-cloud.io
 package v1
 
 import (
