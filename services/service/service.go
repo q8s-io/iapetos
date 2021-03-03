@@ -12,7 +12,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
+	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
 	"github.com/q8s-io/iapetos/tools"
 )
 
@@ -28,15 +28,14 @@ type Service struct {
 }
 
 type ServiceIntf interface {
-	SetServiceName(statefulPod *statefulpodv1.StatefulPod) string
+	SetServiceName(statefulPod *iapetosapiv1.StatefulPod) string
 	IsServiceExits(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Service, error, bool)
-	ServiceTemplate(statefulPod *statefulpodv1.StatefulPod) *corev1.Service
+	ServiceTemplate(statefulPod *iapetosapiv1.StatefulPod) *corev1.Service
 	CreateService(ctx context.Context, service *corev1.Service) error
 	SetFinalizer(ctx context.Context, service *corev1.Service) error
 }
 
 func NewServiceContrl(client client.Client) ServiceIntf {
-	//serviceLog.WithName("service mesasge")
 	return &Service{client, ctrl.Log.WithName("controllers").WithName("service")}
 }
 
@@ -55,7 +54,7 @@ func (s *Service) IsServiceExits(ctx context.Context, namespaceName types.Namesp
 }
 
 // 创建 service 模板
-func (s *Service) ServiceTemplate(statefulPod *statefulpodv1.StatefulPod) *corev1.Service {
+func (s *Service) ServiceTemplate(statefulPod *iapetosapiv1.StatefulPod) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
@@ -65,13 +64,13 @@ func (s *Service) ServiceTemplate(statefulPod *statefulpodv1.StatefulPod) *corev
 			Name:      s.SetServiceName(statefulPod),
 			Namespace: statefulPod.Namespace,
 			Annotations: map[string]string{
-				statefulpodv1.GroupVersion.String(): "true",
+				iapetosapiv1.GroupVersion.String(): "true",
 				ParentNmae:                          statefulPod.Name,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(statefulPod, schema.GroupVersionKind{
-					Group:   statefulpodv1.GroupVersion.Group,
-					Version: statefulpodv1.GroupVersion.Version,
+					Group:   iapetosapiv1.GroupVersion.Group,
+					Version: iapetosapiv1.GroupVersion.Version,
 					Kind:    StatefulPod,
 				}),
 			},
@@ -91,13 +90,13 @@ func (s *Service) CreateService(ctx context.Context, service *corev1.Service) er
 }
 
 // 设置 service name
-func (s *Service) SetServiceName(statefulPod *statefulpodv1.StatefulPod) string {
+func (s *Service) SetServiceName(statefulPod *iapetosapiv1.StatefulPod) string {
 	return fmt.Sprintf("%v-%v", statefulPod.Name, "service")
 }
 
 func (s *Service) SetFinalizer(ctx context.Context, service *corev1.Service) error {
 	if !service.DeletionTimestamp.IsZero() {
-		if !tools.ContainsString(service.Finalizers, FinalizerName) {
+		if !tools.MatchStringFromArray(service.Finalizers, FinalizerName) {
 			service.Finalizers = append(service.Finalizers, FinalizerName)
 			if err := s.Update(ctx, service); err != nil {
 				s.Log.Error(err, "set finalizer error")

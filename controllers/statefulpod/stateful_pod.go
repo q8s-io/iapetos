@@ -7,10 +7,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
-	podcontrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pod_controller"
-	pvccontrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pvc_controller"
-	servicecontrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/service_controller"
+	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
+	podctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pod_controller"
+	pvcctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pvc_controller"
+	svcctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/service_controller"
 	"github.com/q8s-io/iapetos/tools"
 )
 
@@ -18,45 +18,48 @@ const (
 	ParentNmae = "parentName"
 )
 
-type StatefulPodController struct {
+type StatefulPodCtrl struct {
 	client.Client
 }
 
-type StatefulPodContrlInf interface {
-	StatefulPodCtrl(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error
+type StatefulPodCtrlFunc interface {
+	CoreCtrl(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error
 	MonitorPodStatus(ctx context.Context, pod *corev1.Pod) error
 	MonitorPVCStatus(ctx context.Context, pvc *corev1.PersistentVolumeClaim) error
 }
 
-func NewStatefulPodController(client client.Client) StatefulPodContrlInf {
-	return &StatefulPodController{client}
+func NewStatefulPodCtrl(client client.Client) StatefulPodCtrlFunc {
+	return &StatefulPodCtrl{client}
 }
 
-// statefulPod 控制器
-// 若 len(statefulPod.Status.PodStatusMes) < int(*statefulPod.Spec.Size) 扩容
-// 若 len(statefulPod.Status.PodStatusMes) > int(*statefulPod.Spec.Size) 缩容
-// 若 len(statefulPod.Status.PodStatusMes) == int(*statefulPod.Spec.Size) 设置Finalizer,维护
-func (s *StatefulPodController) StatefulPodCtrl(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
+// StatefulPod 控制器
+// len(statefulPod.Status.PodStatusMes) < int(*statefulPod.Spec.Size) 扩容
+// len(statefulPod.Status.PodStatusMes) > int(*statefulPod.Spec.Size) 缩容
+// len(statefulPod.Status.PodStatusMes) == int(*statefulPod.Spec.Size) 设置Finalizer,维护
+func (s *StatefulPodCtrl) CoreCtrl(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error {
 	lenStatus := len(statefulPod.Status.PodStatusMes)
+
+	// 删除中
 	if !statefulPod.DeletionTimestamp.IsZero() {
-		myFinalizerName := statefulpodv1.GroupVersion.String()
+		myFinalizerName := iapetosapiv1.GroupVersion.String()
 		// 删除 statefulPod
-		if tools.ContainsString(statefulPod.Finalizers, myFinalizerName) {
-			// 删除 pod ，pvc
-			if err := podcontrl.NewPodController(s.Client).DeletePodAll(ctx, statefulPod); err != nil {
+		if tools.MatchStringFromArray(statefulPod.Finalizers, myFinalizerName) {
+			// 删除 pod、pvc
+			if err := podctrl.NewPodCtrl(s.Client).DeletePodAll(ctx, statefulPod); err != nil {
 				return err
 			}
-			// 一处 service 的 finalizer
-			if err := servicecontrl.NewServiceController(s.Client).RemoveServiceFinalizer(ctx, statefulPod); err != nil {
+			// 移除 service 的 finalizer
+			if err := svcctrl.NewServiceController(s.Client).RemoveServiceFinalizer(ctx, statefulPod); err != nil {
 				return err
 			}
 			statefulPod.Finalizers = tools.RemoveString(statefulPod.Finalizers, myFinalizerName)
-			if err := s.changeStatefulPod(ctx, statefulPod, 0); err != nil {
+			if err := s.updateStatefulPodStatus(ctx, statefulPod, 0); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
+
 	if lenStatus < int(*statefulPod.Spec.Size) {
 		return s.expansion(ctx, statefulPod, lenStatus)
 	} else if lenStatus > int(*statefulPod.Spec.Size) {
@@ -69,8 +72,8 @@ func (s *StatefulPodController) StatefulPodCtrl(ctx context.Context, statefulPod
 	}
 }
 
-// 修改 statefulSet 状态,index 代表podStatus pvcStatus 要修改的索引位置
-func (s *StatefulPodController) changeStatefulPod(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) error {
+// 修改 statefulSet 状态，index 代表 podStatus、pvcStatus 要修改的索引位置
+func (s *StatefulPodCtrl) updateStatefulPodStatus(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) error {
 	for {
 		if err := s.Update(ctx, statefulPod, client.DryRunAll); err == nil {
 			if err := s.Update(ctx, statefulPod); err != nil {
@@ -87,93 +90,110 @@ func (s *StatefulPodController) changeStatefulPod(ctx context.Context, statefulP
 				break
 			}
 			newStatefulPod.Status.PodStatusMes[index] = statefulPod.Status.PodStatusMes[index]
-			newStatefulPod.Status.PvcStatusMes[index] = statefulPod.Status.PvcStatusMes[index]
+			newStatefulPod.Status.PVCStatusMes[index] = statefulPod.Status.PVCStatusMes[index]
 			statefulPod = newStatefulPod
 		}
 	}
 	return nil
 }
 
-// 维护pod状态
-func (s *StatefulPodController) maintain(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
-	podCtrl := podcontrl.NewPodController(s.Client)
-	if index := podCtrl.MaintainPod(ctx, statefulPod); index != nil {
-		return s.expansion(ctx, statefulPod, *index)
-	}
-	return nil
-}
-
 // 扩容
 // 创建 service
-// 若 pvc 需要创建，则创建pvc ,不需要pvcStatus设置为0值
-// 若 index == len(statefulPod.Status.PodStatusMes) 代表创建
-// 若 index != len(statefulPod.Status.PodStatusMes) 代表维护
-func (s *StatefulPodController) expansion(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) error {
+// pvc 需要创建，则创建 pvc ,不需要 pvcStatus 设置为 0 值
+// index == len(statefulPod.Status.PodStatusMes) 代表创建
+// index != len(statefulPod.Status.PodStatusMes) 代表维护
+func (s *StatefulPodCtrl) expansion(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) error {
 	defer func() {
-		if recover()!=nil{
+		if recover() != nil {
 			return
 		}
 	}()
-	serviceCtrl := servicecontrl.NewServiceController(s.Client)
-	podCtrl := podcontrl.NewPodController(s.Client)
-	pvcCtrl := pvccontrl.NewPvcController(s.Client)
-	var podStatus *statefulpodv1.PodStatus
-	var pvcStatus *statefulpodv1.PvcStatus
+
+	var podStatus *iapetosapiv1.PodStatus
+	var pvcStatus *iapetosapiv1.PVCStatus
 	var err error
-	if index == 0 && statefulPod.Spec.ServiceTemplate != nil { // 索引为 0，且需要生成 service
+
+	serviceCtrl := svcctrl.NewServiceController(s.Client)
+	podCtrl := podctrl.NewPodCtrl(s.Client)
+	pvcCtrl := pvcctrl.NewPVCCtrl(s.Client)
+
+	// 索引为 0，且需要生成 service
+	if index == 0 && statefulPod.Spec.ServiceTemplate != nil {
 		if ok, err := serviceCtrl.CreateService(ctx, statefulPod); err != nil {
 			return err
 		} else if !ok { // service 未创建
 			return nil
 		}
 	}
+
 	if podStatus, err = podCtrl.ExpansionPod(ctx, statefulPod, index); err != nil {
 		return err
 	}
-	if statefulPod.Spec.PvcTemplate != nil {
-		if pvcStatus, err = pvcCtrl.ExpansionPvc(ctx, statefulPod, index); err != nil {
+
+	if statefulPod.Spec.PVCTemplate != nil {
+		if pvcStatus, err = pvcCtrl.ExpansionPVC(ctx, statefulPod, index); err != nil {
 			return err
 		}
 	} else {
-		pvcStatus = &statefulpodv1.PvcStatus{
+		pvcStatus = &iapetosapiv1.PVCStatus{
 			Index:       tools.IntToIntr32(index),
-			PvcName:     "none",
+			PVCName:     "none",
 			Status:      "",
 			AccessModes: []corev1.PersistentVolumeAccessMode{"none"},
 		}
 	}
+
 	if len(statefulPod.Status.PodStatusMes) == index {
 		statefulPod.Status.PodStatusMes = append(statefulPod.Status.PodStatusMes, *podStatus)
-		statefulPod.Status.PvcStatusMes = append(statefulPod.Status.PvcStatusMes, *pvcStatus)
+		statefulPod.Status.PVCStatusMes = append(statefulPod.Status.PVCStatusMes, *pvcStatus)
 	} else {
 		statefulPod.Status.PodStatusMes[index] = *podStatus
-		statefulPod.Status.PvcStatusMes[index] = *pvcStatus
+		statefulPod.Status.PVCStatusMes[index] = *pvcStatus
 	}
-	return s.changeStatefulPod(ctx, statefulPod, index)
+
+	return s.updateStatefulPodStatus(ctx, statefulPod, index)
 }
 
-// 缩容 若pvc存在 ,删除pvc
-func (s *StatefulPodController) shrink(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) error {
-	podCtrl := podcontrl.NewPodController(s.Client)
-	pvcCtrl := pvccontrl.NewPvcController(s.Client)
+// 缩容
+// 若 pvc 存在，删除 pvc
+func (s *StatefulPodCtrl) shrink(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) error {
+	podCtrl := podctrl.NewPodCtrl(s.Client)
+	pvcCtrl := pvcctrl.NewPVCCtrl(s.Client)
+
+	// 判断 pod 是否删除完毕
 	if ok, err := podCtrl.ShrinkPod(ctx, statefulPod, index); err != nil {
 		return err
 	} else if !ok {
 		return nil
-	} // 判断 pod 是否删除完毕
-	if ok, err := pvcCtrl.ShrinkPvc(ctx, statefulPod, index); err != nil {
+	}
+
+	// 判断 pvc 是否删除完毕
+	if ok, err := pvcCtrl.ShrinkPVC(ctx, statefulPod, index); err != nil {
 		return err
 	} else if !ok {
 		return nil
-	} // 判断 pvc 是否删除完毕
+	}
+
 	statefulPod.Status.PodStatusMes = statefulPod.Status.PodStatusMes[:index-1]
-	statefulPod.Status.PvcStatusMes = statefulPod.Status.PvcStatusMes[:index-1]
-	return s.changeStatefulPod(ctx, statefulPod, index-1)
+	statefulPod.Status.PVCStatusMes = statefulPod.Status.PVCStatusMes[:index-1]
+
+	return s.updateStatefulPodStatus(ctx, statefulPod, index-1)
+}
+
+// 维护 pod 状态
+func (s *StatefulPodCtrl) maintain(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error {
+	podCtrl := podctrl.NewPodCtrl(s.Client)
+
+	if index := podCtrl.MaintainPod(ctx, statefulPod); index != nil {
+		return s.expansion(ctx, statefulPod, *index)
+	}
+
+	return nil
 }
 
 // 根据 namespace name 获取 statefulPod
-func (s *StatefulPodController) getStatefulPod(ctx context.Context, namespaceName *types.NamespacedName) *statefulpodv1.StatefulPod {
-	var statefulPod statefulpodv1.StatefulPod
+func (s *StatefulPodCtrl) getStatefulPod(ctx context.Context, namespaceName *types.NamespacedName) *iapetosapiv1.StatefulPod {
+	var statefulPod iapetosapiv1.StatefulPod
 	if err := s.Get(ctx, types.NamespacedName{
 		Namespace: namespaceName.Namespace,
 		Name:      namespaceName.Name,
@@ -184,12 +204,12 @@ func (s *StatefulPodController) getStatefulPod(ctx context.Context, namespaceNam
 }
 
 // 设置 statefulPod finalizer
-func (s *StatefulPodController) setFinalizer(ctx context.Context, statefulPod *statefulpodv1.StatefulPod) error {
-	myFinalizerName := statefulpodv1.GroupVersion.String()
+func (s *StatefulPodCtrl) setFinalizer(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error {
+	myFinalizerName := iapetosapiv1.GroupVersion.String()
 	if statefulPod.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !tools.ContainsString(statefulPod.Finalizers, myFinalizerName) { // finalizer未设置，则添加finalizer
+		if !tools.MatchStringFromArray(statefulPod.Finalizers, myFinalizerName) { // finalizer未设置，则添加finalizer
 			statefulPod.Finalizers = append(statefulPod.Finalizers, myFinalizerName)
-			if err := s.changeStatefulPod(ctx, statefulPod, 0); err != nil {
+			if err := s.updateStatefulPodStatus(ctx, statefulPod, 0); err != nil {
 				return err
 			}
 		}
@@ -199,10 +219,10 @@ func (s *StatefulPodController) setFinalizer(ctx context.Context, statefulPod *s
 
 // 处理 pod 不同的 status
 // pod 异常退出，重新拉起 pod
-// node 节点失联 新建 pod ,pvc
+// node 节点失联，新建 pod、pvc
 // pod running 状态，修改 statefulPod.status.PodStatusMes
 // pod 创建超时，删除重新创建
-func (s *StatefulPodController) MonitorPodStatus(ctx context.Context, pod *corev1.Pod) error {
+func (s *StatefulPodCtrl) MonitorPodStatus(ctx context.Context, pod *corev1.Pod) error {
 	statefulPod := s.getStatefulPod(ctx, &types.NamespacedName{
 		Namespace: pod.Namespace,
 		Name:      pod.Annotations[ParentNmae],
@@ -210,16 +230,16 @@ func (s *StatefulPodController) MonitorPodStatus(ctx context.Context, pod *corev
 	if statefulPod == nil {
 		return nil
 	}
-	index := tools.StrToInt(pod.Annotations["index"])
-	podctl := podcontrl.NewPodController(s.Client)
+	index := tools.StringToInt(pod.Annotations["index"])
+	podctl := podctrl.NewPodCtrl(s.Client)
 	if ok := podctl.MonitorPodStatus(ctx, statefulPod, pod, index); ok {
-		return s.changeStatefulPod(ctx, statefulPod, index)
+		return s.updateStatefulPodStatus(ctx, statefulPod, index)
 	}
 	return nil
 }
 
 // 处理 pvc 不同的 status
-func (s *StatefulPodController) MonitorPVCStatus(ctx context.Context, pvc *corev1.PersistentVolumeClaim) error {
+func (s *StatefulPodCtrl) MonitorPVCStatus(ctx context.Context, pvc *corev1.PersistentVolumeClaim) error {
 	statefulPod := s.getStatefulPod(ctx, &types.NamespacedName{
 		Namespace: pvc.Namespace,
 		Name:      pvc.Annotations[ParentNmae],
@@ -227,10 +247,10 @@ func (s *StatefulPodController) MonitorPVCStatus(ctx context.Context, pvc *corev
 	if statefulPod == nil {
 		return nil
 	}
-	index := tools.StrToInt(pvc.Annotations["index"])
-	pvcctl := pvccontrl.NewPvcController(s.Client)
-	if ok := pvcctl.MonitorPVCStatus(ctx, statefulPod, pvc, index); ok {
-		return s.changeStatefulPod(ctx, statefulPod, index)
+	index := tools.StringToInt(pvc.Annotations["index"])
+	pvcCtrl := pvcctrl.NewPVCCtrl(s.Client)
+	if ok := pvcCtrl.MonitorPVCStatus(ctx, statefulPod, pvc, index); ok {
+		return s.updateStatefulPodStatus(ctx, statefulPod, index)
 	}
 	return nil
 }

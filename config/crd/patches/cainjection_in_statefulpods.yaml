@@ -5,4 +5,4 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)
-  name: statefulpods.iapetos.foundary-cloud.io.iapetos.foundary-cloud.io
+  name: statefulpods.iapetos.foundary-cloud.io

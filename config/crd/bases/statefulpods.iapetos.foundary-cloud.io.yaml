@@ -6,9 +6,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.2.5
   creationTimestamp: null
-  name: statefulpods.iapetos.foundary-cloud.io.iapetos.foundary-cloud.io
+  name: statefulpods.iapetos.foundary-cloud.io
 spec:
-  group: iapetos.foundary-cloud.io.iapetos.foundary-cloud.io
+  group: iapetos.foundary-cloud.io
   names:
     kind: StatefulPod
     listKind: StatefulPodList

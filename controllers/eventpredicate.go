@@ -6,8 +6,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
-	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
-	podcontrl "github.com/q8s-io/iapetos/services/pod"
+	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
+	podservice "github.com/q8s-io/iapetos/services/pod"
 )
 
 type StatefulPodPredicate struct {
@@ -18,29 +18,25 @@ func (s StatefulPodPredicate) Create(e event.CreateEvent) bool {
 }
 
 func (s StatefulPodPredicate) Delete(e event.DeleteEvent) bool {
-	/*if obj,ok:=e.Object.(*statefulpodv1.StatefulPod);ok{
-		fmt.Println("statefulPod deleted----------",obj.DeletionTimestamp)
-		return true
-	}*/
 	return true
 }
 
 func (s StatefulPodPredicate) Update(e event.UpdateEvent) bool {
-	if oldObj, ok := e.ObjectOld.(*statefulpodv1.StatefulPod); ok {
-		newObj, _ := e.ObjectNew.(*statefulpodv1.StatefulPod)
+	if oldObj, ok := e.ObjectOld.(*iapetosapiv1.StatefulPod); ok {
+		newObj, _ := e.ObjectNew.(*iapetosapiv1.StatefulPod)
 		if !reflect.DeepEqual(oldObj.Spec.PodTemplate, newObj.Spec.PodTemplate) {
 			return false
 		}
-		if len(newObj.Status.PodStatusMes) != 0 && newObj.Status.PodStatusMes[len(newObj.Status.PodStatusMes)-1].Status == podcontrl.Preparing {
+		if len(newObj.Status.PodStatusMes) != 0 && newObj.Status.PodStatusMes[len(newObj.Status.PodStatusMes)-1].Status == podservice.Preparing {
 			return false
 		}
-		if len(newObj.Status.PvcStatusMes) != 0 && newObj.Status.PvcStatusMes[len(newObj.Status.PvcStatusMes)-1].Status == corev1.ClaimPending {
+		if len(newObj.Status.PVCStatusMes) != 0 && newObj.Status.PVCStatusMes[len(newObj.Status.PVCStatusMes)-1].Status == corev1.ClaimPending {
 			return false
 		}
 		if !reflect.DeepEqual(oldObj.Finalizers, newObj.Finalizers) {
 			return false
 		}
-		if !reflect.DeepEqual(oldObj.Status.PvcStatusMes, newObj.Status.PvcStatusMes) {
+		if !reflect.DeepEqual(oldObj.Status.PVCStatusMes, newObj.Status.PVCStatusMes) {
 			return false
 		}
 	}

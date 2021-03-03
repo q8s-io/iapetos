@@ -13,7 +13,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
+	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
 	pvservice "github.com/q8s-io/iapetos/services/pv"
 )
 
@@ -24,32 +24,31 @@ const (
 	Deleting    = "Deleting"
 )
 
-type PvcService struct {
+type PVCService struct {
 	client.Client
 	Log logr.Logger
 }
 
-type PvcServiceIntf interface {
-	PvcTemplate(ctx context.Context, statefulpod *statefulpodv1.StatefulPod, pvcName string, index int) (*corev1.PersistentVolumeClaim, error)
+type PVCServiceFunc interface {
+	PVCTemplate(ctx context.Context, statefulpod *iapetosapiv1.StatefulPod, pvcName string, index int) (*corev1.PersistentVolumeClaim, error)
 	CreatePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim) error
-	IsPvcExist(ctx context.Context, name types.NamespacedName) (*corev1.PersistentVolumeClaim, error, bool)
+	IsPVCExist(ctx context.Context, name types.NamespacedName) (*corev1.PersistentVolumeClaim, error, bool)
 	DeletePVC(ctx context.Context, deletePVC *corev1.PersistentVolumeClaim) error
-	SetPvcName(statefulPod *statefulpodv1.StatefulPod, index int) string
+	SetPVCName(statefulPod *iapetosapiv1.StatefulPod, index int) string
 }
 
-func NewPvcService(client client.Client) PvcServiceIntf {
-	//pvcLog.WithName("pvc message")
-	return &PvcService{client, ctrl.Log.WithName("controllers").WithName("pvc")}
+func NewPVCService(client client.Client) PVCServiceFunc {
+	return &PVCService{client, ctrl.Log.WithName("controllers").WithName("pvc")}
 }
 
 // 创建 pvc 模板
-func (p *PvcService) PvcTemplate(ctx context.Context, statefulpod *statefulpodv1.StatefulPod, pvcName string, index int) (*corev1.PersistentVolumeClaim, error) {
+func (p *PVCService) PVCTemplate(ctx context.Context, statefulpod *iapetosapiv1.StatefulPod, pvcName string, index int) (*corev1.PersistentVolumeClaim, error) {
 	pvHandler := pvservice.NewPVService(p.Client)
 	if len(statefulpod.Spec.PVNames) != 0 && len(statefulpod.Spec.PVNames) > index {
 		if _, ok := pvHandler.IsPVCanUse(ctx, statefulpod.Spec.PVNames[index]); ok {
 			name := ""
-			statefulpod.Spec.PvcTemplate.StorageClassName = &name
-			statefulpod.Spec.PvcTemplate.VolumeName = statefulpod.Spec.PVNames[index]
+			statefulpod.Spec.PVCTemplate.StorageClassName = &name
+			statefulpod.Spec.PVCTemplate.VolumeName = statefulpod.Spec.PVNames[index]
 		}
 	}
 	return &corev1.PersistentVolumeClaim{
@@ -61,25 +60,25 @@ func (p *PvcService) PvcTemplate(ctx context.Context, statefulpod *statefulpodv1
 			Name:      pvcName,
 			Namespace: statefulpod.Namespace,
 			Annotations: map[string]string{
-				statefulpodv1.GroupVersion.String(): "true",
+				iapetosapiv1.GroupVersion.String(): "true",
 				ParentNmae:                          statefulpod.Name,
 				Index:                               strconv.Itoa(index),
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(statefulpod, schema.GroupVersionKind{
-					Group:   statefulpodv1.GroupVersion.Group,
-					Version: statefulpodv1.GroupVersion.Version,
+					Group:   iapetosapiv1.GroupVersion.Group,
+					Version: iapetosapiv1.GroupVersion.Version,
 					Kind:    StatefulPod,
 				}),
 			},
 		},
-		Spec: *statefulpod.Spec.PvcTemplate.DeepCopy(),
+		Spec: *statefulpod.Spec.PVCTemplate.DeepCopy(),
 	}, nil
 
 }
 
 // 判断 pvc 是否存在
-func (p *PvcService) IsPvcExist(ctx context.Context, nameSpaceName types.NamespacedName) (*corev1.PersistentVolumeClaim, error, bool) {
+func (p *PVCService) IsPVCExist(ctx context.Context, nameSpaceName types.NamespacedName) (*corev1.PersistentVolumeClaim, error, bool) {
 	var pvc corev1.PersistentVolumeClaim
 	if err := p.Get(ctx, types.NamespacedName{
 		Namespace: nameSpaceName.Namespace,
@@ -95,7 +94,7 @@ func (p *PvcService) IsPvcExist(ctx context.Context, nameSpaceName types.Namespa
 }
 
 // 创建 pvc
-func (p *PvcService) CreatePVC(ctx context.Context, createPvc *corev1.PersistentVolumeClaim) error {
+func (p *PVCService) CreatePVC(ctx context.Context, createPvc *corev1.PersistentVolumeClaim) error {
 	if err := p.Create(ctx, createPvc); err != nil {
 		p.Log.Error(err, "create pvc error")
 		return err
@@ -104,7 +103,7 @@ func (p *PvcService) CreatePVC(ctx context.Context, createPvc *corev1.Persistent
 }
 
 // 删除 pvc
-func (p *PvcService) DeletePVC(ctx context.Context, deletePVC *corev1.PersistentVolumeClaim) error {
+func (p *PVCService) DeletePVC(ctx context.Context, deletePVC *corev1.PersistentVolumeClaim) error {
 	if err := p.Delete(ctx, deletePVC); err != nil {
 		p.Log.Error(err, "delete pvc error")
 		return err
@@ -113,8 +112,8 @@ func (p *PvcService) DeletePVC(ctx context.Context, deletePVC *corev1.Persistent
 }
 
 // 设置 pvc name
-func (p *PvcService) SetPvcName(statefulPod *statefulpodv1.StatefulPod, index int) string {
-	if statefulPod.Spec.PvcTemplate == nil { // pvc 不需要创建，返回 none
+func (p *PVCService) SetPVCName(statefulPod *iapetosapiv1.StatefulPod, index int) string {
+	if statefulPod.Spec.PVCTemplate == nil { // pvc 不需要创建，返回 none
 		return "none"
 	}
 	if statefulPod.Spec.PodTemplate.Volumes[0].PersistentVolumeClaim.ClaimName == "" {

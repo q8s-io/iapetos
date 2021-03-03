@@ -4,12 +4,12 @@ import (
 	"strconv"
 )
 
-func StrToInt(str string) int {
+func StringToInt(str string) int {
 	v, _ := strconv.Atoi(str)
 	return v
 }
 
-func ContainsString(strArray []string, value string) bool {
+func MatchStringFromArray(strArray []string, value string) bool {
 	for _, v := range strArray {
 		if v == value {
 			return true

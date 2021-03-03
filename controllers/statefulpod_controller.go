@@ -28,8 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
-	statefulpodcontrl "github.com/q8s-io/iapetos/controllers/statefulpod"
+	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
+	statefulpodctrl "github.com/q8s-io/iapetos/controllers/statefulpod"
 )
 
 // StatefulPodReconciler reconciles a StatefulPod object
@@ -54,24 +54,24 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 	podLog := r.Log.WithValues("pod", req.NamespacedName)
 	pvcLog := r.Log.WithValues("pvc", req.NamespacedName)
 
-	var statefulPod statefulpodv1.StatefulPod
+	var statefulPod iapetosapiv1.StatefulPod
 	var pod corev1.Pod
 	var pvc corev1.PersistentVolumeClaim
+
 	// statefulPod
-	/*	fmt.Println(time.Now().Format("2006-01-02 15:04:05"))
-		time.Sleep(time.Second*2)*/
 	if err := r.Get(ctx, req.NamespacedName, &statefulPod); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			statefulPodLog.Error(err, "unable to fetch statefulPod")
 			return ctrl.Result{}, err
 		}
 	} else {
-		if err := statefulpodcontrl.NewStatefulPodController(r.Client).StatefulPodCtrl(ctx, &statefulPod); err != nil {
+		if err := statefulpodctrl.NewStatefulPodCtrl(r.Client).CoreCtrl(ctx, &statefulPod); err != nil {
 			statefulPodLog.Error(err, "handle statefulPod error")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
+
 	// pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if client.IgnoreNotFound(err) != nil {
@@ -79,7 +79,7 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 			return ctrl.Result{}, err
 		}
 	} else {
-		if err := statefulpodcontrl.NewStatefulPodController(r.Client).MonitorPodStatus(ctx, &pod); err != nil {
+		if err := statefulpodctrl.NewStatefulPodCtrl(r.Client).MonitorPodStatus(ctx, &pod); err != nil {
 			podLog.Error(err, "handle pod error")
 			return ctrl.Result{}, err
 		}
@@ -93,24 +93,23 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 			return ctrl.Result{}, err
 		}
 	} else {
-		if err := statefulpodcontrl.NewStatefulPodController(r.Client).MonitorPVCStatus(ctx, &pvc); err != nil {
+		if err := statefulpodctrl.NewStatefulPodCtrl(r.Client).MonitorPVCStatus(ctx, &pvc); err != nil {
 			pvcLog.Error(err, "handle pod error")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
+
 	return ctrl.Result{}, nil
 }
 
 func (r *StatefulPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	//ctrl:=&controller.Options{MaxConcurrentReconciles: 10}
-	return ctrl.NewControllerManagedBy(mgr).For(&statefulpodv1.StatefulPod{}).
+	return ctrl.NewControllerManagedBy(mgr).For(&iapetosapiv1.StatefulPod{}).
 		Watches(&source.Kind{Type: &corev1.Pod{}}, &StatefulPodEvent{}).
 		Watches(&source.Kind{Type: &corev1.PersistentVolumeClaim{}}, &StatefulPodEvent{}).
 		WithEventFilter(StatefulPodPredicate{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 3,
-			//Reconciler:              &StatefulPodReconciler{},
 		}).
 		Complete(r)
 }

@@ -35,7 +35,7 @@ type StatefulPodSpec struct {
 	PVRecyclePolicy corev1.PersistentVolumeReclaimPolicy `json:"pvRecyclePolicy,omitempty"`
 	ServiceTemplate *corev1.ServiceSpec                  `json:"serviceTemplate,omitempty"`
 	PodTemplate     corev1.PodSpec                       `json:"podTemplate"`
-	PvcTemplate     *corev1.PersistentVolumeClaimSpec    `json:"pvcTemplate,omitempty"`
+	PVCTemplate     *corev1.PersistentVolumeClaimSpec    `json:"pvcTemplate,omitempty"`
 	PVNames         []string                             `json:"pvNames,omitempty"`
 }
 
@@ -44,7 +44,7 @@ type StatefulPodStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	PodStatusMes []PodStatus `json:"podStatus,omitempty"`
-	PvcStatusMes []PvcStatus `json:"pvcStatus,omitempty"`
+	PVCStatusMes []PVCStatus `json:"pvcStatus,omitempty"`
 }
 
 // pod 状态
@@ -56,9 +56,9 @@ type PodStatus struct {
 }
 
 // pvc 状态
-type PvcStatus struct {
+type PVCStatus struct {
 	Index        *int32                              `json:"index"`
-	PvcName      string                              `json:"pvcName"`
+	PVCName      string                              `json:"pvcName"`
 	Status       corev1.PersistentVolumeClaimPhase   `json:"status"`
 	Capacity     string                              `json:"capacity"`
 	AccessModes  []corev1.PersistentVolumeAccessMode `json:"accessModes"`

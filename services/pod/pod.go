@@ -12,7 +12,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
+	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
 	pvservice "github.com/q8s-io/iapetos/services/pv"
 	pvcservice "github.com/q8s-io/iapetos/services/pvc"
 	"github.com/q8s-io/iapetos/services/service"
@@ -32,17 +32,16 @@ type PodService struct {
 	Log logr.Logger
 }
 
-type PodServiceIntf interface {
+type PodServiceFunc interface {
 	IsPodExist(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Pod, error, bool)
-	PodTempale(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, podName string, index int) *corev1.Pod
+	PodTempale(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, podName string, index int) *corev1.Pod
 	CreatePod(ctx context.Context, pod *corev1.Pod) error
 	DeletePod(ctx context.Context, pod *corev1.Pod) error
-	DeletePodMandatory(ctx context.Context, pod *corev1.Pod, statefulPod *statefulpodv1.StatefulPod) error
+	DeletePodMandatory(ctx context.Context, pod *corev1.Pod, statefulPod *iapetosapiv1.StatefulPod) error
 	JudgmentPodDel(pod *corev1.Pod) bool
 }
 
-func NewPodService(client client.Client) PodServiceIntf {
-	//podLog.WithName("pod message")
+func NewPodService(client client.Client) PodServiceFunc {
 	return &PodService{client, ctrl.Log.WithName("controllers").WithName("pod")}
 }
 
@@ -50,7 +49,7 @@ func NewPodService(client client.Client) PodServiceIntf {
 func (p *PodService) IsPodExist(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Pod, error, bool) {
 	var pod corev1.Pod
 	if err := p.Get(ctx, namespaceName, &pod); err != nil {
-		if client.IgnoreNotFound(err) == nil { // 找不到改pod
+		if client.IgnoreNotFound(err) == nil { // 找不到该 pod
 			return nil, nil, false
 		}
 		p.Log.Error(err, "get pod error")
@@ -61,7 +60,7 @@ func (p *PodService) IsPodExist(ctx context.Context, namespaceName types.Namespa
 }
 
 // 创建 pod 模板
-func (p *PodService) PodTempale(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, podName string, index int) *corev1.Pod {
+func (p *PodService) PodTempale(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, podName string, index int) *corev1.Pod {
 	pvHandler := pvservice.NewPVService(p.Client)
 	if len(statefulPod.Spec.PVNames) != 0 && len(statefulPod.Spec.PVNames) > index {
 		if pv, ok := pvHandler.IsPVCanUse(ctx, statefulPod.Spec.PVNames[index]); ok {
@@ -78,51 +77,50 @@ func (p *PodService) PodTempale(ctx context.Context, statefulPod *statefulpodv1.
 			Name:      podName,
 			Namespace: statefulPod.Namespace,
 			Annotations: map[string]string{
-				statefulpodv1.GroupVersion.String(): "true",
+				iapetosapiv1.GroupVersion.String(): "true",
 				ParentNmae:                          statefulPod.Name,
 				Index:                               fmt.Sprintf("%v", index),
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(statefulPod, schema.GroupVersionKind{
-					Group:   statefulpodv1.GroupVersion.Group,
-					Version: statefulpodv1.GroupVersion.Version,
+					Group:   iapetosapiv1.GroupVersion.Group,
+					Version: iapetosapiv1.GroupVersion.Version,
 					Kind:    StatefulPod,
 				}),
 			},
 		},
 		Spec: *statefulPod.Spec.PodTemplate.DeepCopy(),
 	}
-	// 添加 hostname subdomain 用于dns发现
-	pod.Spec.Hostname=podName
-	// TODO 判断 pvc 是否需要创建 只支持挂载一个pvc
-	if statefulPod.Spec.PvcTemplate != nil {
-		pod.Spec.Volumes[0].PersistentVolumeClaim.ClaimName = pvcservice.NewPvcService(p.Client).SetPvcName(statefulPod, index)
+	// 添加 hostname subdomain 用于 dns 发现
+	pod.Spec.Hostname = podName
+	// TODO 判断 pvc 是否需要创建，只支持挂载一个 pvc
+	if statefulPod.Spec.PVCTemplate != nil {
+		pod.Spec.Volumes[0].PersistentVolumeClaim.ClaimName = pvcservice.NewPVCService(p.Client).SetPVCName(statefulPod, index)
 	}
-	lables:=map[string]string{}
+	lables := map[string]string{}
 	// 判断 service 是否需要创建，若需要则将标签自动打上
 	if statefulPod.Spec.ServiceTemplate != nil {
-		pod.Spec.Subdomain=service.NewServiceContrl(p.Client).SetServiceName(statefulPod)
-		for k,v:=range statefulPod.Spec.ServiceTemplate.Selector{
-			if _,ok:=lables[k];!ok{
-				lables[k]=v
+		pod.Spec.Subdomain = service.NewServiceContrl(p.Client).SetServiceName(statefulPod)
+		for k, v := range statefulPod.Spec.ServiceTemplate.Selector {
+			if _, ok := lables[k]; !ok {
+				lables[k] = v
 			}
 		}
 	}
-	if statefulPod.Spec.Selector!=nil{
-		for k,v:=range statefulPod.Spec.Selector.MatchLabels{
-			if _,ok:=lables[k];!ok{
-				lables[k]=v
+	if statefulPod.Spec.Selector != nil {
+		for k, v := range statefulPod.Spec.Selector.MatchLabels {
+			if _, ok := lables[k]; !ok {
+				lables[k] = v
 			}
 		}
 	}
-	pod.Labels=lables
+	pod.Labels = lables
 	return &pod
 }
 
 // 创建 pod
 func (p *PodService) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	if err := p.Create(ctx, pod); err != nil {
-		//	podLog.Error(err,"create pod error")
 		return err
 	}
 	return nil
@@ -131,23 +129,22 @@ func (p *PodService) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 // 删除 pod
 func (p *PodService) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	if err := p.Delete(ctx, pod); err != nil {
-		//	podLog.Error(err,"delete pod error")
 		return err
 	}
 	return nil
 }
 
-// 立即删除 pod ,节点失联时调用
-// 若绑定的有 pvc ，则将 pvc 也进行删除
-func (p *PodService) DeletePodMandatory(ctx context.Context, pod *corev1.Pod, statefulPod *statefulpodv1.StatefulPod) error {
-	pvchandler := pvcservice.NewPvcService(p.Client)
+// 立即删除 pod，节点失联时调用
+// 若绑定的有 pvc，则将 pvc 也进行删除
+func (p *PodService) DeletePodMandatory(ctx context.Context, pod *corev1.Pod, statefulPod *iapetosapiv1.StatefulPod) error {
+	pvchandler := pvcservice.NewPVCService(p.Client)
 	if err := p.Delete(ctx, pod, client.DeleteOption(client.GracePeriodSeconds(0)), client.DeleteOption(client.PropagationPolicy(metav1.DeletePropagationBackground))); err != nil {
 		p.Log.Error(err, "delete pod mandatory error")
 		return err
 	}
-	if statefulPod.Spec.PvcTemplate != nil {
-		pvcName := pvchandler.SetPvcName(statefulPod, tools.StrToInt(pod.Annotations["index"]))
-		if pvc, err, ok := pvchandler.IsPvcExist(ctx, types.NamespacedName{
+	if statefulPod.Spec.PVCTemplate != nil {
+		pvcName := pvchandler.SetPVCName(statefulPod, tools.StringToInt(pod.Annotations["index"]))
+		if pvc, err, ok := pvchandler.IsPVCExist(ctx, types.NamespacedName{
 			Namespace: pod.Namespace,
 			Name:      pvcName,
 		}); err == nil && ok { // pvc 存在
@@ -159,13 +156,10 @@ func (p *PodService) DeletePodMandatory(ctx context.Context, pod *corev1.Pod, st
 	return nil
 }
 
-// 判断pod 是否应该是要删除
+// 判断 pod 是否应该是要删除
 func (p *PodService) JudgmentPodDel(pod *corev1.Pod) bool {
 	if !pod.DeletionTimestamp.IsZero() {
 		return true
 	}
 	return false
 }
-
-// 删除所有 pod , 删除 statefulPod 时调用
-// 删除顺序： 先删除pod ，若pvc存在,且 statefulPod 的 PVRecyclePolicy 为 Retain，将pv设置为 Retain ,删除pvc ,将 pv设置为Available

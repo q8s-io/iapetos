@@ -18,12 +18,11 @@ type NodeService struct {
 	Log logr.Logger
 }
 
-type NodeServiceIntf interface {
+type NodeServiceFunc interface {
 	IsNodeReady(ctx context.Context, nodeName string) bool
 }
 
-func NewNodeService(client client.Client) NodeServiceIntf {
-	//nodeLog.WithName("node messgae")
+func NewNodeService(client client.Client) NodeServiceFunc {
 	return &NodeService{client, ctrl.Log.WithName("controllers").WithName("node")}
 }
 
@@ -33,7 +32,7 @@ func (n *NodeService) IsNodeReady(ctx context.Context, nodeName string) bool {
 		return true
 	}
 	var node corev1.Node
-	// 判断 node是否存在
+	// 判断 node 是否存在
 	if err := n.Get(ctx, types.NamespacedName{
 		Namespace: "",
 		Name:      nodeName,
@@ -41,8 +40,7 @@ func (n *NodeService) IsNodeReady(ctx context.Context, nodeName string) bool {
 		n.Log.Error(err, "get node error")
 		return false
 	}
-	// 存在，判断是否超时 即判断node.spec.conditions最后一个元素的状态是否为true ,若不为true，
-	// 判断失联时间是否超时
+	// 存在，判断是否超时，即判断 node.spec.conditions 最后一个元素的状态是否为 true，若不为 true，判断失联时间是否超时
 	timeOut := time.Second * time.Duration(resourcecfg.StatefulPodResourceCfg.Node.Timeout)
 	if node.Status.Conditions[len(node.Status.Conditions)-1].Status != corev1.ConditionTrue {
 		lostConnectTime := node.Status.Conditions[len(node.Status.Conditions)-1].LastTransitionTime

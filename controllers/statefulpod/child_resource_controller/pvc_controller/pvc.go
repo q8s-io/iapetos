@@ -2,73 +2,75 @@ package pvc_controller
 
 import (
 	"context"
-	"fmt"
 
-	statefulpodv1 "github.com/q8s-io/iapetos/api/v1"
-	pvcservice "github.com/q8s-io/iapetos/services/pvc"
-	"github.com/q8s-io/iapetos/tools"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
+	pvcservice "github.com/q8s-io/iapetos/services/pvc"
+	"github.com/q8s-io/iapetos/tools"
 )
 
-type PvcController struct {
+type PVCCtrl struct {
 	client.Client
 }
 
-type PvcContrlIntf interface {
-	ExpansionPvc(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) (*statefulpodv1.PvcStatus, error)
-	ShrinkPvc(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) (bool, error)
-	MonitorPVCStatus(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, pvc *corev1.PersistentVolumeClaim, index int) bool
+type PVCCtrlFunc interface {
+	ExpansionPVC(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (*iapetosapiv1.PVCStatus, error)
+	ShrinkPVC(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (bool, error)
+	MonitorPVCStatus(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, pvc *corev1.PersistentVolumeClaim, index int) bool
 }
 
-func NewPvcController(client client.Client) PvcContrlIntf {
-	return &PvcController{client}
+func NewPVCCtrl(client client.Client) PVCCtrlFunc {
+	return &PVCCtrl{client}
 }
 
-func (pvcctrl *PvcController) ExpansionPvc(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) (*statefulpodv1.PvcStatus, error) {
-	pvcHandler := pvcservice.NewPvcService(pvcctrl.Client)
-	pvcName := pvcHandler.SetPvcName(statefulPod, index)
-	if _, err, ok := pvcHandler.IsPvcExist(ctx, types.NamespacedName{
+func (pvcctrl *PVCCtrl) ExpansionPVC(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (*iapetosapiv1.PVCStatus, error) {
+	pvcHandler := pvcservice.NewPVCService(pvcctrl.Client)
+	pvcName := pvcHandler.SetPVCName(statefulPod, index)
+
+	if _, err, ok := pvcHandler.IsPVCExist(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      pvcName,
-	}); err == nil && !ok { // pvc 不存在。创建 pvc
-		pvcTemplate, _ := pvcHandler.PvcTemplate(ctx, statefulPod, pvcName, index)
+	}); err == nil && !ok { // pvc 不存在，创建 pvc
+		pvcTemplate, _ := pvcHandler.PVCTemplate(ctx, statefulPod, pvcName, index)
 		if err := pvcHandler.CreatePVC(ctx, pvcTemplate); err != nil {
 			return nil, err
 		}
-		fmt.Println("-----------create pvc successful")
-		pvcStatus := &statefulpodv1.PvcStatus{
+		pvcStatus := &iapetosapiv1.PVCStatus{
 			Index:        tools.IntToIntr32(index),
-			PvcName:      pvcName,
+			PVCName:      pvcName,
 			Status:       corev1.ClaimPending,
-			AccessModes:  statefulPod.Spec.PvcTemplate.AccessModes,
-			StorageClass: *statefulPod.Spec.PvcTemplate.StorageClassName,
+			AccessModes:  statefulPod.Spec.PVCTemplate.AccessModes,
+			StorageClass: *statefulPod.Spec.PVCTemplate.StorageClassName,
 		}
 		return pvcStatus, nil
-	} else if err == nil && ok { // pvc 存在，pvcStatus不变
-		pvcStatus := statefulPod.Status.PvcStatusMes[index]
+		// pvc 存在，pvcStatus 不变
+	} else if err == nil && ok {
+		pvcStatus := statefulPod.Status.PVCStatusMes[index]
 		return &pvcStatus, nil
 	} else {
 		return nil, err
 	}
 }
 
-func (pvcctrl *PvcController) ShrinkPvc(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, index int) (bool, error) {
-	pvcHandler := pvcservice.NewPvcService(pvcctrl.Client)
-	pvcName := pvcHandler.SetPvcName(statefulPod, index-1)
-	if pvc, err, ok := pvcHandler.IsPvcExist(ctx, types.NamespacedName{
+func (pvcctrl *PVCCtrl) ShrinkPVC(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (bool, error) {
+	pvcHandler := pvcservice.NewPVCService(pvcctrl.Client)
+	pvcName := pvcHandler.SetPVCName(statefulPod, index-1)
+	if pvc, err, ok := pvcHandler.IsPVCExist(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      pvcName,
 	}); err == nil && ok { // pvc 存在，删除 pvc
-		if !pvc.DeletionTimestamp.IsZero() { // pvc 正在删除
+		// pvc 正在删除
+		if !pvc.DeletionTimestamp.IsZero() {
 			return false, nil
 		}
 		if err := pvcHandler.DeletePVC(ctx, pvc); err != nil {
 			return false, err
 		}
-	} else if err == nil && !ok {
 		// pvc 删除成功
+	} else if err == nil && !ok {
 		return true, nil
 	} else {
 		return false, err
@@ -76,25 +78,28 @@ func (pvcctrl *PvcController) ShrinkPvc(ctx context.Context, statefulPod *statef
 	return false, nil
 }
 
-func (pvcctrl *PvcController) MonitorPVCStatus(ctx context.Context, statefulPod *statefulpodv1.StatefulPod, pvc *corev1.PersistentVolumeClaim, index int) bool {
-	if index >= len(statefulPod.Status.PvcStatusMes) {
+func (pvcctrl *PVCCtrl) MonitorPVCStatus(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, pvc *corev1.PersistentVolumeClaim, index int) bool {
+	if index >= len(statefulPod.Status.PVCStatusMes) {
 		return false
 	}
+
 	if !pvc.DeletionTimestamp.IsZero() {
-		if statefulPod.Status.PvcStatusMes[index].Status == pvcservice.Deleting {
+		if statefulPod.Status.PVCStatusMes[index].Status == pvcservice.Deleting {
 			return false
 		}
-		statefulPod.Status.PvcStatusMes[index].Status = pvcservice.Deleting
+		statefulPod.Status.PVCStatusMes[index].Status = pvcservice.Deleting
 		return true
 	}
+
 	if pvc.Status.Phase == corev1.ClaimBound {
-		if statefulPod.Status.PvcStatusMes[index].Status == corev1.ClaimBound {
+		if statefulPod.Status.PVCStatusMes[index].Status == corev1.ClaimBound {
 			return false
 		}
-		statefulPod.Status.PvcStatusMes[index].Status = corev1.ClaimBound
+		statefulPod.Status.PVCStatusMes[index].Status = corev1.ClaimBound
 		capicity := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
-		statefulPod.Status.PvcStatusMes[index].Capacity = capicity.String()
+		statefulPod.Status.PVCStatusMes[index].Capacity = capicity.String()
 		return true
 	}
+
 	return false
 }

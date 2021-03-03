@@ -1,4 +1,4 @@
-apiVersion: iapetos.foundary-cloud.io.iapetos.foundary-cloud.io/v1
+apiVersion: iapetos.foundary-cloud.io/v1
 kind: StatefulPod
 metadata:
   name: statefulpod-sample
