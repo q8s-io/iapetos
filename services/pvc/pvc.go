@@ -61,8 +61,8 @@ func (p *PVCService) PVCTemplate(ctx context.Context, statefulpod *iapetosapiv1.
 			Namespace: statefulpod.Namespace,
 			Annotations: map[string]string{
 				iapetosapiv1.GroupVersion.String(): "true",
-				ParentNmae:                          statefulpod.Name,
-				Index:                               strconv.Itoa(index),
+				ParentNmae:                         statefulpod.Name,
+				Index:                              strconv.Itoa(index),
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(statefulpod, schema.GroupVersionKind{

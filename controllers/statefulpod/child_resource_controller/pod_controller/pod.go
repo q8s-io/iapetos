@@ -70,7 +70,7 @@ func (podctrl *PodCtrl) ShrinkPod(ctx context.Context, statefulPod *iapetosapiv1
 	if pod, err, ok := podHandler.IsPodExist(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      podName,
-	}); err == nil && ok { // 若pod 正在被删除则不再删除
+	}); err == nil && ok { // 若 pod 正在被删除则不再删除
 		if podHandler.JudgmentPodDel(pod) {
 			return false, nil
 		}

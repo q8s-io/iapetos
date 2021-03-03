@@ -65,7 +65,7 @@ func (s *Service) ServiceTemplate(statefulPod *iapetosapiv1.StatefulPod) *corev1
 			Namespace: statefulPod.Namespace,
 			Annotations: map[string]string{
 				iapetosapiv1.GroupVersion.String(): "true",
-				ParentNmae:                          statefulPod.Name,
+				ParentNmae:                         statefulPod.Name,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(statefulPod, schema.GroupVersionKind{

@@ -35,7 +35,7 @@ func NewStatefulPodCtrl(client client.Client) StatefulPodCtrlFunc {
 // StatefulPod 控制器
 // len(statefulPod.Status.PodStatusMes) < int(*statefulPod.Spec.Size) 扩容
 // len(statefulPod.Status.PodStatusMes) > int(*statefulPod.Spec.Size) 缩容
-// len(statefulPod.Status.PodStatusMes) == int(*statefulPod.Spec.Size) 设置Finalizer,维护
+// len(statefulPod.Status.PodStatusMes) == int(*statefulPod.Spec.Size) 设置 Finalizer，维护
 func (s *StatefulPodCtrl) CoreCtrl(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error {
 	lenStatus := len(statefulPod.Status.PodStatusMes)
 
@@ -99,7 +99,7 @@ func (s *StatefulPodCtrl) updateStatefulPodStatus(ctx context.Context, statefulP
 
 // 扩容
 // 创建 service
-// pvc 需要创建，则创建 pvc ,不需要 pvcStatus 设置为 0 值
+// pvc 需要创建，则创建 pvc，不需要 pvcStatus 设置为 0 值
 // index == len(statefulPod.Status.PodStatusMes) 代表创建
 // index != len(statefulPod.Status.PodStatusMes) 代表维护
 func (s *StatefulPodCtrl) expansion(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) error {

@@ -7,7 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
-	servicehandle "github.com/q8s-io/iapetos/services/service"
+	svcservice "github.com/q8s-io/iapetos/services/service"
 )
 
 type ServiceController struct {
@@ -24,18 +24,18 @@ func NewServiceController(client client.Client) ServiceContrlIntf {
 }
 
 func (servicectl *ServiceController) CreateService(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) (bool, error) {
-	serviceable := servicehandle.NewServiceContrl(servicectl.Client)
+	serviceable := svcservice.NewServiceContrl(servicectl.Client)
 	serviceName := serviceable.SetServiceName(statefulPod)
 	if service, err, ok := serviceable.IsServiceExits(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      serviceName,
-	}); err == nil && !ok { // service 不存在 ,创建 service
+	}); err == nil && !ok { // service 不存在，创建 service
 		serviceTemplate := serviceable.ServiceTemplate(statefulPod)
 		if err := serviceable.CreateService(ctx, serviceTemplate); err != nil {
 			return false, err
 		}
 	} else if err == nil && ok {
-		// service创建成功，设置finalizer防止误删
+		// service 创建成功，设置 finalizer 防止误删
 		if err := serviceable.SetFinalizer(ctx, service); err != nil {
 			return false, err
 		}
@@ -47,12 +47,12 @@ func (servicectl *ServiceController) CreateService(ctx context.Context, stateful
 }
 
 func (servicectl *ServiceController) RemoveServiceFinalizer(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error {
-	serviceable := servicehandle.NewServiceContrl(servicectl.Client)
+	serviceable := svcservice.NewServiceContrl(servicectl.Client)
 	serviceName := serviceable.SetServiceName(statefulPod)
 	if service, err, ok := serviceable.IsServiceExits(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      serviceName,
-	}); err == nil && ok { // service 存在 ,清空 finalizer
+	}); err == nil && ok { // service 存在，清空 finalizer
 		service.Finalizers = nil
 		if err := servicectl.Update(ctx, service); err != nil {
 			return err

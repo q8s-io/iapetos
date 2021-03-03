@@ -78,8 +78,8 @@ func (p *PodService) PodTempale(ctx context.Context, statefulPod *iapetosapiv1.S
 			Namespace: statefulPod.Namespace,
 			Annotations: map[string]string{
 				iapetosapiv1.GroupVersion.String(): "true",
-				ParentNmae:                          statefulPod.Name,
-				Index:                               fmt.Sprintf("%v", index),
+				ParentNmae:                         statefulPod.Name,
+				Index:                              fmt.Sprintf("%v", index),
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(statefulPod, schema.GroupVersionKind{
