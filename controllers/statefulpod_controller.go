@@ -109,7 +109,7 @@ func (r *StatefulPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &corev1.PersistentVolumeClaim{}}, &StatefulPodEvent{}).
 		WithEventFilter(StatefulPodPredicate{}).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: 3,
+			MaxConcurrentReconciles:3,
 		}).
 		Complete(r)
 }

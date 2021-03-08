@@ -1,4 +1,4 @@
-apiVersion: iapetos.foundary-cloud.io.iapetos.foundary-cloud.io/v1
+apiVersion: iapetos.foundary-cloud.io/v1
 kind: StatefulPod
 metadata:
   name: test-statefulpod
@@ -26,7 +26,7 @@ spec:
       - port: 80
         targetPort: 80
   pvcTemplate:
-    storageClassName: "stateful-pod-class"
+    storageClassName: "kubevirt-hostpath-provisioner"
     accessModes:
       - ReadWriteOnce
     resources:

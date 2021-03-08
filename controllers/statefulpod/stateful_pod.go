@@ -2,6 +2,7 @@ package statefulpod
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,7 +39,6 @@ func NewStatefulPodCtrl(client client.Client) StatefulPodCtrlFunc {
 // len(statefulPod.Status.PodStatusMes) == int(*statefulPod.Spec.Size) 设置 Finalizer，维护
 func (s *StatefulPodCtrl) CoreCtrl(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error {
 	lenStatus := len(statefulPod.Status.PodStatusMes)
-
 	// 删除中
 	if !statefulPod.DeletionTimestamp.IsZero() {
 		myFinalizerName := iapetosapiv1.GroupVersion.String()
@@ -61,6 +61,7 @@ func (s *StatefulPodCtrl) CoreCtrl(ctx context.Context, statefulPod *iapetosapiv
 	}
 
 	if lenStatus < int(*statefulPod.Spec.Size) {
+		fmt.Println("------------扩容")
 		return s.expansion(ctx, statefulPod, lenStatus)
 	} else if lenStatus > int(*statefulPod.Spec.Size) {
 		return s.shrink(ctx, statefulPod, lenStatus)
@@ -74,6 +75,11 @@ func (s *StatefulPodCtrl) CoreCtrl(ctx context.Context, statefulPod *iapetosapiv
 
 // 修改 statefulSet 状态，index 代表 podStatus、pvcStatus 要修改的索引位置
 func (s *StatefulPodCtrl) updateStatefulPodStatus(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) error {
+	/*defer func() {
+		if recover() != nil {
+			return
+		}
+	}()*/
 	for {
 		if err := s.Update(ctx, statefulPod, client.DryRunAll); err == nil {
 			if err := s.Update(ctx, statefulPod); err != nil {
@@ -125,11 +131,9 @@ func (s *StatefulPodCtrl) expansion(ctx context.Context, statefulPod *iapetosapi
 			return nil
 		}
 	}
-
 	if podStatus, err = podCtrl.ExpansionPod(ctx, statefulPod, index); err != nil {
 		return err
 	}
-
 	if statefulPod.Spec.PVCTemplate != nil {
 		if pvcStatus, err = pvcCtrl.ExpansionPVC(ctx, statefulPod, index); err != nil {
 			return err
@@ -142,7 +146,6 @@ func (s *StatefulPodCtrl) expansion(ctx context.Context, statefulPod *iapetosapi
 			AccessModes: []corev1.PersistentVolumeAccessMode{"none"},
 		}
 	}
-
 	if len(statefulPod.Status.PodStatusMes) == index {
 		statefulPod.Status.PodStatusMes = append(statefulPod.Status.PodStatusMes, *podStatus)
 		statefulPod.Status.PVCStatusMes = append(statefulPod.Status.PVCStatusMes, *pvcStatus)
@@ -232,7 +235,7 @@ func (s *StatefulPodCtrl) MonitorPodStatus(ctx context.Context, pod *corev1.Pod)
 	}
 	index := tools.StringToInt(pod.Annotations["index"])
 	podctl := podctrl.NewPodCtrl(s.Client)
-	if ok := podctl.MonitorPodStatus(ctx, statefulPod, pod, index); ok {
+	if ok := podctl.MonitorPodStatus(ctx, statefulPod, pod, &index); ok {
 		return s.updateStatefulPodStatus(ctx, statefulPod, index)
 	}
 	return nil

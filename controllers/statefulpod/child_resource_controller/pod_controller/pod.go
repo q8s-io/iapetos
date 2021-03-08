@@ -26,7 +26,7 @@ type PodCtrlFunc interface {
 	ShrinkPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (bool, error)
 	DeletePodAll(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error
 	MaintainPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) *int
-	MonitorPodStatus(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, pod *corev1.Pod, index int) bool
+	MonitorPodStatus(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, pod *corev1.Pod, index *int) bool
 }
 
 func NewPodCtrl(client client.Client) PodCtrlFunc {
@@ -159,8 +159,8 @@ func (podctrl *PodCtrl) MaintainPod(ctx context.Context, statefulPod *iapetosapi
 	return nil
 }
 
-func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, pod *corev1.Pod, index int) bool {
-	if index >= len(statefulPod.Status.PodStatusMes) {
+func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, pod *corev1.Pod, index *int) bool {
+	if *index >= len(statefulPod.Status.PodStatusMes) {
 		return false
 	}
 	podHandler := podservice.NewPodService(podctrl.Client)
@@ -169,10 +169,10 @@ func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapet
 
 	if podHandler.JudgmentPodDel(pod) {
 		// 设置过 deleting 状态则不再进行设置
-		if statefulPod.Status.PodStatusMes[index].Status == podservice.Deleting {
+		if statefulPod.Status.PodStatusMes[*index].Status == podservice.Deleting {
 			return false
 		}
-		statefulPod.Status.PodStatusMes[index].Status = podservice.Deleting
+		statefulPod.Status.PodStatusMes[*index].Status = podservice.Deleting
 		return true
 	}
 
@@ -186,20 +186,20 @@ func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapet
 		if err := podHandler.DeletePodMandatory(ctx, pod, statefulPod); err != nil {
 			return false
 		} else {
-			statefulPod.Status.PodStatusMes[index].Status = podservice.Deleting
-			statefulPod.Status.PVCStatusMes[index].Status = pvcservice.Deleting
+			statefulPod.Status.PodStatusMes[*index].Status = podservice.Deleting
+			statefulPod.Status.PVCStatusMes[*index].Status = pvcservice.Deleting
 			return true
 		}
 	}
 
 	// pod running
 	if pod.Status.Phase == corev1.PodRunning {
-		if statefulPod.Status.PodStatusMes[index].Status == corev1.PodRunning {
+		if statefulPod.Status.PodStatusMes[*index].Status == corev1.PodRunning {
 			return false
 		}
-		statefulPod.Status.PodStatusMes[index].PodName = pod.Name
-		statefulPod.Status.PodStatusMes[index].Status = corev1.PodRunning
-		statefulPod.Status.PodStatusMes[index].NodeName = pod.Spec.NodeName
+		statefulPod.Status.PodStatusMes[*index].PodName = pod.Name
+		statefulPod.Status.PodStatusMes[*index].Status = corev1.PodRunning
+		statefulPod.Status.PodStatusMes[*index].NodeName = pod.Spec.NodeName
 		return true
 	}
 
@@ -208,7 +208,7 @@ func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapet
 		if err := podHandler.DeletePod(ctx, pod); err != nil {
 			return false
 		}
-		pvcName := pvcHandler.SetPVCName(statefulPod, index)
+		pvcName := pvcHandler.SetPVCName(statefulPod, *index)
 		if pvc, err, ok := pvcHandler.IsPVCExist(ctx, types.NamespacedName{
 			Namespace: statefulPod.Namespace,
 			Name:      pvcName,
@@ -220,13 +220,15 @@ func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapet
 			return false
 		}
 		// 维护时重新拉起 pod 超时
-		if len(statefulPod.Status.PodStatusMes) == int(*statefulPod.Spec.Size) {
-			statefulPod.Status.PodStatusMes[index].Status = podservice.Deleting
-			statefulPod.Status.PVCStatusMes[index].Status = pvcservice.Deleting
+		if len(statefulPod.Status.PodStatusMes) == int(*statefulPod.Spec.Size) || *index==int(*statefulPod.Spec.Size){
+			statefulPod.Status.PodStatusMes[*index].Status = podservice.Deleting
+			statefulPod.Status.PVCStatusMes[*index].Status = pvcservice.Deleting
 			// 扩容时创建 pod 超时
 		} else {
-			statefulPod.Status.PodStatusMes = statefulPod.Status.PodStatusMes[:index]
-			statefulPod.Status.PVCStatusMes = statefulPod.Status.PVCStatusMes[:index]
+			statefulPod.Status.PodStatusMes = statefulPod.Status.PodStatusMes[:*index]
+			statefulPod.Status.PVCStatusMes = statefulPod.Status.PVCStatusMes[:*index]
+			newIndex:=*index-1
+			index=&newIndex
 		}
 		return true
 	}
