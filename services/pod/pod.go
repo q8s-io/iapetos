@@ -91,6 +91,9 @@ func (p *PodService) PodTempale(ctx context.Context, statefulPod *iapetosapiv1.S
 		},
 		Spec: *statefulPod.Spec.PodTemplate.DeepCopy(),
 	}
+	if _, ok := statefulPod.Annotations["cockrochDB"]; ok {
+		pod.Annotations["cockrochDB"] = "true"
+	}
 	// 添加 hostname subdomain 用于 dns 发现
 	pod.Spec.Hostname = podName
 	// TODO 判断 pvc 是否需要创建，只支持挂载一个 pvc
@@ -137,6 +140,15 @@ func (p *PodService) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 // 立即删除 pod，节点失联时调用
 // 若绑定的有 pvc，则将 pvc 也进行删除
 func (p *PodService) DeletePodMandatory(ctx context.Context, pod *corev1.Pod, statefulPod *iapetosapiv1.StatefulPod) error {
+	if _, ok := pod.Annotations["nodeUnhealthy"]; !ok {
+		pod.Annotations["nodeUnhealthy"] = "true"
+		if err := p.Update(ctx, pod); err != nil {
+			return err
+		}
+		return nil
+	} else {
+		fmt.Println("------------------pod.Annotations[nodeUnhealthy]")
+	}
 	pvchandler := pvcservice.NewPVCService(p.Client)
 	if err := p.Delete(ctx, pod, client.DeleteOption(client.GracePeriodSeconds(0)), client.DeleteOption(client.PropagationPolicy(metav1.DeletePropagationBackground))); err != nil {
 		p.Log.Error(err, "delete pod mandatory error")

@@ -15,6 +15,7 @@ type Config struct {
 
 type PodConfig struct {
 	Timeout int `toml:"timeout"`
+	Ready   int `toml:"ready"`
 }
 
 type NodeConfig struct {

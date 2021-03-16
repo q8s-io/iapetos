@@ -3,6 +3,7 @@ package statefulpod
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -12,6 +13,7 @@ import (
 	podctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pod_controller"
 	pvcctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pvc_controller"
 	svcctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/service_controller"
+	podservice "github.com/q8s-io/iapetos/services/pod"
 	"github.com/q8s-io/iapetos/tools"
 )
 
@@ -21,6 +23,7 @@ const (
 
 type StatefulPodCtrl struct {
 	client.Client
+	sync.RWMutex
 }
 
 type StatefulPodCtrlFunc interface {
@@ -30,7 +33,7 @@ type StatefulPodCtrlFunc interface {
 }
 
 func NewStatefulPodCtrl(client client.Client) StatefulPodCtrlFunc {
-	return &StatefulPodCtrl{client}
+	return &StatefulPodCtrl{client, sync.RWMutex{}}
 }
 
 // StatefulPod 控制器
@@ -59,7 +62,9 @@ func (s *StatefulPodCtrl) CoreCtrl(ctx context.Context, statefulPod *iapetosapiv
 		}
 		return nil
 	}
-
+	if lenStatus != 0 && (statefulPod.Status.PodStatusMes[lenStatus-1].Status == podservice.Preparing || statefulPod.Status.PVCStatusMes[lenStatus-1].Status == corev1.ClaimPending) {
+		lenStatus--
+	}
 	if lenStatus < int(*statefulPod.Spec.Size) {
 		fmt.Println("------------扩容")
 		return s.expansion(ctx, statefulPod, lenStatus)
@@ -80,10 +85,11 @@ func (s *StatefulPodCtrl) updateStatefulPodStatus(ctx context.Context, statefulP
 			return
 		}
 	}()*/
+	s.RWMutex.Lock()
 	for {
 		if err := s.Update(ctx, statefulPod, client.DryRunAll); err == nil {
 			if err := s.Update(ctx, statefulPod); err != nil {
-				return err
+				continue
 			}
 			break
 		} else {
@@ -95,11 +101,14 @@ func (s *StatefulPodCtrl) updateStatefulPodStatus(ctx context.Context, statefulP
 			if newStatefulPod == nil {
 				break
 			}
-			newStatefulPod.Status.PodStatusMes[index] = statefulPod.Status.PodStatusMes[index]
-			newStatefulPod.Status.PVCStatusMes[index] = statefulPod.Status.PVCStatusMes[index]
+			if index < 0 {
+				newStatefulPod.Status.PodStatusMes[index] = statefulPod.Status.PodStatusMes[index]
+				newStatefulPod.Status.PVCStatusMes[index] = statefulPod.Status.PVCStatusMes[index]
+			}
 			statefulPod = newStatefulPod
 		}
 	}
+	s.RWMutex.Unlock()
 	return nil
 }
 
@@ -114,7 +123,6 @@ func (s *StatefulPodCtrl) expansion(ctx context.Context, statefulPod *iapetosapi
 			return
 		}
 	}()
-
 	var podStatus *iapetosapiv1.PodStatus
 	var pvcStatus *iapetosapiv1.PVCStatus
 	var err error
@@ -133,6 +141,9 @@ func (s *StatefulPodCtrl) expansion(ctx context.Context, statefulPod *iapetosapi
 	}
 	if podStatus, err = podCtrl.ExpansionPod(ctx, statefulPod, index); err != nil {
 		return err
+	}
+	if podCtrl.IsCreationTimeout(ctx, statefulPod, index) {
+		return nil
 	}
 	if statefulPod.Spec.PVCTemplate != nil {
 		if pvcStatus, err = pvcCtrl.ExpansionPVC(ctx, statefulPod, index); err != nil {
@@ -162,35 +173,34 @@ func (s *StatefulPodCtrl) expansion(ctx context.Context, statefulPod *iapetosapi
 func (s *StatefulPodCtrl) shrink(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) error {
 	podCtrl := podctrl.NewPodCtrl(s.Client)
 	pvcCtrl := pvcctrl.NewPVCCtrl(s.Client)
-
 	// 判断 pod 是否删除完毕
 	if ok, err := podCtrl.ShrinkPod(ctx, statefulPod, index); err != nil {
 		return err
 	} else if !ok {
 		return nil
 	}
-
 	// 判断 pvc 是否删除完毕
 	if ok, err := pvcCtrl.ShrinkPVC(ctx, statefulPod, index); err != nil {
 		return err
 	} else if !ok {
 		return nil
 	}
-
 	statefulPod.Status.PodStatusMes = statefulPod.Status.PodStatusMes[:index-1]
 	statefulPod.Status.PVCStatusMes = statefulPod.Status.PVCStatusMes[:index-1]
-
 	return s.updateStatefulPodStatus(ctx, statefulPod, index-1)
 }
 
 // 维护 pod 状态
 func (s *StatefulPodCtrl) maintain(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error {
 	podCtrl := podctrl.NewPodCtrl(s.Client)
-
+	if index := podCtrl.PodIsOk(ctx, statefulPod); index != nil {
+		if err := s.updateStatefulPodStatus(ctx, statefulPod, *index); err != nil {
+			return err
+		}
+	}
 	if index := podCtrl.MaintainPod(ctx, statefulPod); index != nil {
 		return s.expansion(ctx, statefulPod, *index)
 	}
-
 	return nil
 }
 

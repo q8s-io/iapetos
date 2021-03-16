@@ -82,7 +82,6 @@ func (pvcctrl *PVCCtrl) MonitorPVCStatus(ctx context.Context, statefulPod *iapet
 	if index >= len(statefulPod.Status.PVCStatusMes) {
 		return false
 	}
-
 	if !pvc.DeletionTimestamp.IsZero() {
 		if statefulPod.Status.PVCStatusMes[index].Status == pvcservice.Deleting {
 			return false
@@ -90,7 +89,6 @@ func (pvcctrl *PVCCtrl) MonitorPVCStatus(ctx context.Context, statefulPod *iapet
 		statefulPod.Status.PVCStatusMes[index].Status = pvcservice.Deleting
 		return true
 	}
-
 	if pvc.Status.Phase == corev1.ClaimBound {
 		if statefulPod.Status.PVCStatusMes[index].Status == corev1.ClaimBound {
 			return false
@@ -100,6 +98,5 @@ func (pvcctrl *PVCCtrl) MonitorPVCStatus(ctx context.Context, statefulPod *iapet
 		statefulPod.Status.PVCStatusMes[index].Capacity = capicity.String()
 		return true
 	}
-
 	return false
 }

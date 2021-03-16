@@ -94,7 +94,7 @@ func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 		}
 	} else {
 		if err := statefulpodctrl.NewStatefulPodCtrl(r.Client).MonitorPVCStatus(ctx, &pvc); err != nil {
-			pvcLog.Error(err, "handle pod error")
+			pvcLog.Error(err, "handle pvc error")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -109,7 +109,7 @@ func (r *StatefulPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &corev1.PersistentVolumeClaim{}}, &StatefulPodEvent{}).
 		WithEventFilter(StatefulPodPredicate{}).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles:3,
+			MaxConcurrentReconciles: 3,
 		}).
 		Complete(r)
 }
