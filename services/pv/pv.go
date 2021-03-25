@@ -107,11 +107,9 @@ func (p *PVService) changePVStatus(ctx context.Context, pv *corev1.PersistentVol
 	// 循环等待，直到 pv 状态为可用
 	for {
 		if err := p.Update(ctx, pv, client.DryRunAll); err == nil {
-			if err := p.Update(ctx, pv); err != nil {
-				p.Log.Error(err, "change pv status error")
-				return err
+			if err := p.Update(ctx, pv); err == nil {
+				return nil
 			}
-			return nil
 		} else {
 			// 更新失败，重新拉取最新状态，然后更新
 			newPV, _, _ := p.IsPVExists(ctx, types.NamespacedName{

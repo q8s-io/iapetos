@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stateful-pod
+  labels:
+   app.kubernetes.io/name: stateful-pod
+   app.kubernetes.io/version: v1
+   app.kubernetes.io/component: operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stateful-pod
+      app.kubernetes.io/version: v1
+      app.kubernetes.io/component: operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stateful-pod
+        app.kubernetes.io/version: v1
+        app.kubernetes.io/component: operator
+    spec:
+      serviceAccountName: cockroach-database-sa
+      containers:
+      - name: stateful-pod
+        image: uhub.service.ucloud.cn/infra/statefulpod:v1
+        ports:
+        - containerPort: 8080
+
+
