@@ -20,7 +20,7 @@ const Deleting = corev1.PersistentVolumeClaimPhase("Deleting")
 
 type PVCCtrlFunc interface {
 	ExpansionPVC(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (*iapetosapiv1.PVCStatus, error)
-	ShrinkPVC(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (bool)
+	ShrinkPVC(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) bool
 	MonitorPVCStatus(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, pvc *corev1.PersistentVolumeClaim, index int) bool
 }
 
@@ -30,14 +30,14 @@ func NewPVCCtrl(client client.Client) PVCCtrlFunc {
 
 func (pvcctrl *PVCCtrl) ExpansionPVC(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (*iapetosapiv1.PVCStatus, error) {
 	pvcHandler := pvcservice.NewPVCService(pvcctrl.Client)
-	pvcName := pvcHandler.GetName(statefulPod,index)
+	pvcName := pvcHandler.GetName(statefulPod, index)
 
 	if _, ok := pvcHandler.IsExists(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      *pvcName,
 	}); !ok { // pvc 不存在，创建 pvc
-		pvcTemplate:= pvcHandler.CreateTemplate(ctx, statefulPod, *pvcName, index)
-		if _,err := pvcHandler.Create(ctx, pvcTemplate); err != nil {
+		pvcTemplate := pvcHandler.CreateTemplate(ctx, statefulPod, *pvcName, index)
+		if _, err := pvcHandler.Create(ctx, pvcTemplate); err != nil {
 			return nil, err
 		}
 		pvcStatus := &iapetosapiv1.PVCStatus{
@@ -55,9 +55,9 @@ func (pvcctrl *PVCCtrl) ExpansionPVC(ctx context.Context, statefulPod *iapetosap
 	}
 }
 
-func (pvcctrl *PVCCtrl) ShrinkPVC(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (bool) {
+func (pvcctrl *PVCCtrl) ShrinkPVC(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) bool {
 	pvcHandler := pvcservice.NewPVCService(pvcctrl.Client)
-	pvcName := pvcHandler.GetName(statefulPod,index)
+	pvcName := pvcHandler.GetName(statefulPod, index)
 	if pvc, ok := pvcHandler.IsExists(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      *pvcName,
@@ -90,7 +90,7 @@ func (pvcctrl *PVCCtrl) MonitorPVCStatus(ctx context.Context, statefulPod *iapet
 		statefulPod.Status.PVCStatusMes[index].Status = corev1.ClaimBound
 		capicity := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
 		statefulPod.Status.PVCStatusMes[index].Capacity = capicity.String()
-		statefulPod.Status.PVCStatusMes[index].PVName=pvc.Spec.VolumeName
+		statefulPod.Status.PVCStatusMes[index].PVName = pvc.Spec.VolumeName
 		return true
 	}
 	return false

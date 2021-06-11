@@ -15,7 +15,7 @@ type ServiceController struct {
 }
 
 type ServiceContrlIntf interface {
-	CreateService(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) (bool)
+	CreateService(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) bool
 	//RemoveServiceFinalizer(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error
 }
 
@@ -23,36 +23,19 @@ func NewServiceController(client client.Client) ServiceContrlIntf {
 	return &ServiceController{client}
 }
 
-func (servicectl *ServiceController) CreateService(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) (bool) {
-	svcHandle:=svcservice.NewPodService(servicectl.Client)
-	serviceName:=svcHandle.GetName(statefulPod,0)
-	if _,ok:=svcHandle.IsExists(ctx,types.NamespacedName{
+func (servicectl *ServiceController) CreateService(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) bool {
+	svcHandle := svcservice.NewPodService(servicectl.Client)
+	serviceName := svcHandle.GetName(statefulPod, 0)
+	if _, ok := svcHandle.IsExists(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
 		Name:      *serviceName,
-	});!ok{
-		svcTemplate:=svcHandle.CreateTemplate(ctx,statefulPod,"",0)
-		if _,err:=svcHandle.Create(ctx,svcTemplate);err!=nil{
+	}); !ok {
+		svcTemplate := svcHandle.CreateTemplate(ctx, statefulPod, "", 0)
+		if _, err := svcHandle.Create(ctx, svcTemplate); err != nil {
 			return false
 		}
-	}else {
+	} else {
 		return true
 	}
 	return false
 }
-
-/*func (servicectl *ServiceController) RemoveServiceFinalizer(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error {
-	serviceable := svcservice.NewServiceContrl(servicectl.Client)
-	serviceName := serviceable.SetServiceName(statefulPod)
-	if service, err, ok := serviceable.IsServiceExits(ctx, types.NamespacedName{
-		Namespace: statefulPod.Namespace,
-		Name:      serviceName,
-	}); err == nil && ok { // service 存在，清空 finalizer
-		service.Finalizers = nil
-		if err := servicectl.Update(ctx, service); err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
-	return nil
-}*/

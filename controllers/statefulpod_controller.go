@@ -33,10 +33,10 @@ import (
 )
 
 const (
-	Pod = "Pod"
-	PVC= "PVC"
-	StatefulPod="StatefulPod"
-	UNKNOWN="UNKNOWN"
+	Pod         = "Pod"
+	PVC         = "PVC"
+	StatefulPod = "StatefulPod"
+	UNKNOWN     = "UNKNOWN"
 )
 
 // StatefulPodReconciler reconciles a StatefulPod object
@@ -57,15 +57,15 @@ type StatefulPodReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/status,verbs=get
 func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	switch obj,kind:=r.getType(ctx,req);kind {
+	switch obj, kind := r.getType(ctx, req); kind {
 	case Pod:
-		pod:=obj.(*corev1.Pod)
+		pod := obj.(*corev1.Pod)
 		return statefulpodctrl.NewStatefulPodCtrl(r.Client).MonitorPodStatus(ctx, pod)
 	case PVC:
-		pvc:=obj.(*corev1.PersistentVolumeClaim)
+		pvc := obj.(*corev1.PersistentVolumeClaim)
 		return statefulpodctrl.NewStatefulPodCtrl(r.Client).MonitorPVCStatus(ctx, pvc)
 	case StatefulPod:
-		statefulPod:=obj.(*iapetosapiv1.StatefulPod)
+		statefulPod := obj.(*iapetosapiv1.StatefulPod)
 		return statefulpodctrl.NewStatefulPodCtrl(r.Client).CoreCtrl(ctx, statefulPod)
 	}
 	return ctrl.Result{}, nil
@@ -82,18 +82,18 @@ func (r *StatefulPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *StatefulPodReconciler)getType(ctx context.Context,req ctrl.Request)(interface{},string){
+func (r *StatefulPodReconciler) getType(ctx context.Context, req ctrl.Request) (interface{}, string) {
 	var pod corev1.Pod
 	var pvc corev1.PersistentVolumeClaim
 	var statefulPod iapetosapiv1.StatefulPod
-	if err:=r.Get(ctx,req.NamespacedName,&statefulPod);err==nil{
-		return &statefulPod,StatefulPod
+	if err := r.Get(ctx, req.NamespacedName, &statefulPod); err == nil {
+		return &statefulPod, StatefulPod
 	}
-	if err:=r.Get(ctx,req.NamespacedName,&pod);err==nil{
-		return &pod,Pod
+	if err := r.Get(ctx, req.NamespacedName, &pod); err == nil {
+		return &pod, Pod
 	}
-	if err:=r.Get(ctx,req.NamespacedName,&pvc);err==nil{
-		return &pvc,PVC
+	if err := r.Get(ctx, req.NamespacedName, &pvc); err == nil {
+		return &pvc, PVC
 	}
-	return nil,UNKNOWN
+	return nil, UNKNOWN
 }

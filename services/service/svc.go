@@ -14,27 +14,26 @@ import (
 	"github.com/q8s-io/iapetos/services"
 )
 
-
 type Service struct {
 	*services.Resource
 }
 
 func NewPodService(client client.Client) services.ServiceInf {
-	clientMsg:=services.NewResource(client)
+	clientMsg := services.NewResource(client)
 	clientMsg.Log.WithName("service")
 	return &Service{clientMsg}
 }
 
-func (svc *Service)DeleteMandatory(ctx context.Context, obj interface{}, statefulPod *iapetosapiv1.StatefulPod)error{
+func (svc *Service) DeleteMandatory(ctx context.Context, obj interface{}, statefulPod *iapetosapiv1.StatefulPod) error {
 	return nil
 }
 
-func (svc *Service)GetName(statefulPod *iapetosapiv1.StatefulPod,index int)*string{
-	name:=svc.SetServiceName(statefulPod)
+func (svc *Service) GetName(statefulPod *iapetosapiv1.StatefulPod, index int) *string {
+	name := svc.SetServiceName(statefulPod)
 	return &name
 }
 
-func (svc *Service)CreateTemplate(ctx context.Context,statefulPod *iapetosapiv1.StatefulPod,name string,index int)interface{}{
+func (svc *Service) CreateTemplate(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, name string, index int) interface{} {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
@@ -45,7 +44,7 @@ func (svc *Service)CreateTemplate(ctx context.Context,statefulPod *iapetosapiv1.
 			Namespace: statefulPod.Namespace,
 			Annotations: map[string]string{
 				iapetosapiv1.GroupVersion.String(): "true",
-				services.ParentNmae:                         statefulPod.Name,
+				services.ParentNmae:                statefulPod.Name,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(statefulPod, schema.GroupVersionKind{
@@ -59,141 +58,63 @@ func (svc *Service)CreateTemplate(ctx context.Context,statefulPod *iapetosapiv1.
 	}
 }
 
-func (svc *Service)IsExists(ctx context.Context,nameSpaceName types.NamespacedName)(interface{},bool){
+func (svc *Service) IsExists(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, bool) {
 	var service corev1.Service
-	if err:=svc.Get(ctx,nameSpaceName,&service);err!=nil{
-		if client.IgnoreNotFound(err)!=nil{
-			svc.Log.Error(err,"get svc error")
+	if err := svc.Get(ctx, nameSpaceName, &service); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			svc.Log.Error(err, "get svc error")
 		}
-		return nil,false
+		return nil, false
 	}
-	return &service,true
+	return &service, true
 }
 
-func (svc *Service)IsResourceVersionSame(ctx context.Context,obj interface{})bool{
-	service:=obj.(*corev1.Service)
-	if newSvc,ok:=svc.IsExists(ctx,types.NamespacedName{
+func (svc *Service) IsResourceVersionSame(ctx context.Context, obj interface{}) bool {
+	service := obj.(*corev1.Service)
+	if newSvc, ok := svc.IsExists(ctx, types.NamespacedName{
 		Namespace: service.Namespace,
 		Name:      service.Name,
-	});!ok{
+	}); !ok {
 		return false
-	}else {
+	} else {
 		// 判断 resource version 是否一致
-		newVersion:=newSvc.(*corev1.Service).ResourceVersion
-		if service.ResourceVersion!=newVersion{
+		newVersion := newSvc.(*corev1.Service).ResourceVersion
+		if service.ResourceVersion != newVersion {
 			return false
-		}else {
+		} else {
 			return true
 		}
 	}
 }
 
-func (svc *Service)Create(ctx context.Context,obj interface{})(interface{},error){
-	service:=obj.(*corev1.Service)
-	if err:=svc.Client.Create(ctx,service);err!=nil{
-		svc.Log.Error(err,"create service error")
+func (svc *Service) Create(ctx context.Context, obj interface{}) (interface{}, error) {
+	service := obj.(*corev1.Service)
+	if err := svc.Client.Create(ctx, service); err != nil {
+		svc.Log.Error(err, "create service error")
 		return nil, err
 	}
-	return service,nil
+	return service, nil
 }
 
-func (svc *Service)Update(ctx context.Context,obj interface{})(interface{},error){
-	service:=obj.(*corev1.Service)
-	if svc.IsResourceVersionSame(ctx,service){
-		if err:=svc.Client.Update(ctx,service);err!=nil{
-			svc.Log.Error(err,"update service error")
+func (svc *Service) Update(ctx context.Context, obj interface{}) (interface{}, error) {
+	service := obj.(*corev1.Service)
+	if svc.IsResourceVersionSame(ctx, service) {
+		if err := svc.Client.Update(ctx, service); err != nil {
+			svc.Log.Error(err, "update service error")
 			return nil, err
 		}
-	}else {
-		svc.Log.Error(errors.New(""),services.ResourceVersionUnSame)
-		return nil,errors.New("")
-	}
-	return service,nil
-}
-
-func (svc *Service)Delete(ctx context.Context,obj interface{})error{
-	service:=obj.(*corev1.Service)
-	if err:=svc.Client.Delete(ctx,service);err!=nil{
-		svc.Log.Error(err,"delete service error")
-		return err
-	}
-	return nil
-}
-
-
-/*type ServiceIntf interface {
-	SetServiceName(statefulPod *iapetosapiv1.StatefulPod) string
-	IsServiceExits(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Service, error, bool)
-	ServiceTemplate(statefulPod *iapetosapiv1.StatefulPod) *corev1.Service
-	CreateService(ctx context.Context, service *corev1.Service) error
-	SetFinalizer(ctx context.Context, service *corev1.Service) error
-}
-
-
-// 判断 service 是否存在
-func (s *Service) IsServiceExits(ctx context.Context, namespaceName types.NamespacedName) (*corev1.Service, error, bool) {
-	var service corev1.Service
-	if err := s.Get(ctx, namespaceName, &service); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, nil, false
-		}
-		s.Log.Error(err, "get service error")
-		return nil, err, false
 	} else {
-		return &service, nil, true
+		svc.Log.Error(errors.New(""), services.ResourceVersionUnSame)
+		return nil, errors.New("")
 	}
+	return service, nil
 }
 
-// 创建 service 模板
-func (s *Service) ServiceTemplate(statefulPod *iapetosapiv1.StatefulPod) *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Service",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      s.SetServiceName(statefulPod),
-			Namespace: statefulPod.Namespace,
-			Annotations: map[string]string{
-				iapetosapiv1.GroupVersion.String(): "true",
-				ParentNmae:                         statefulPod.Name,
-			},
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(statefulPod, schema.GroupVersionKind{
-					Group:   iapetosapiv1.GroupVersion.Group,
-					Version: iapetosapiv1.GroupVersion.Version,
-					Kind:    StatefulPod,
-				}),
-			},
-		},
-		Spec: *statefulPod.Spec.ServiceTemplate.DeepCopy(),
-	}
-}
-
-// 创建 service
-func (s *Service) CreateService(ctx context.Context, service *corev1.Service) error {
-	if err := s.Create(ctx, service); err != nil {
-		s.Log.Error(err, "create service error")
+func (svc *Service) Delete(ctx context.Context, obj interface{}) error {
+	service := obj.(*corev1.Service)
+	if err := svc.Client.Delete(ctx, service); err != nil {
+		svc.Log.Error(err, "delete service error")
 		return err
 	}
-	s.Log.V(1).Info("create service successfilly")
 	return nil
 }
-
-// 设置 service name
-func (s *Service) SetServiceName(statefulPod *iapetosapiv1.StatefulPod) string {
-	return fmt.Sprintf("%v-%v", statefulPod.Name, "service")
-}
-
-func (s *Service) SetFinalizer(ctx context.Context, service *corev1.Service) error {
-	if !service.DeletionTimestamp.IsZero() {
-		if !tools.MatchStringFromArray(service.Finalizers, FinalizerName) {
-			service.Finalizers = append(service.Finalizers, FinalizerName)
-			if err := s.Update(ctx, service); err != nil {
-				s.Log.Error(err, "set finalizer error")
-				return err
-			}
-		}
-	}
-	return nil
-}*/

@@ -16,21 +16,21 @@ import (
 )
 
 type ServiceInf interface {
-	Create(ctx context.Context,obj interface{})(interface{},error)
-	Update(ctx context.Context,obj interface{})(interface{},error)
-	Delete(ctx context.Context,obj interface{})error
-	IsExists(ctx context.Context,nameSpaceName types.NamespacedName)(interface{},bool)
-	CreateTemplate(ctx context.Context,statefulPod *iapetosapiv1.StatefulPod,name string,index int)interface{}
-	GetName(statefulPod *iapetosapiv1.StatefulPod,index int)*string
-	IsResourceVersionSame(ctx context.Context,obj interface{})bool
-	DeleteMandatory(ctx context.Context, obj interface{}, statefulPod *iapetosapiv1.StatefulPod)error
+	Create(ctx context.Context, obj interface{}) (interface{}, error)
+	Update(ctx context.Context, obj interface{}) (interface{}, error)
+	Delete(ctx context.Context, obj interface{}) error
+	IsExists(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, bool)
+	CreateTemplate(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, name string, index int) interface{}
+	GetName(statefulPod *iapetosapiv1.StatefulPod, index int) *string
+	IsResourceVersionSame(ctx context.Context, obj interface{}) bool
+	DeleteMandatory(ctx context.Context, obj interface{}, statefulPod *iapetosapiv1.StatefulPod) error
 }
 
-const  (
-	ResourceVersionUnSame="ResourceVersionUnSame"
-	ParentNmae  = "parentName"
-	StatefulPod = "StatefulPod"
-	Index       = "index"
+const (
+	ResourceVersionUnSame = "ResourceVersionUnSame"
+	ParentNmae            = "parentName"
+	StatefulPod           = "StatefulPod"
+	Index                 = "index"
 )
 
 type Resource struct {
@@ -38,47 +38,47 @@ type Resource struct {
 	Log logr.Logger
 }
 
-func NewResource(client client.Client)*Resource {
+func NewResource(client client.Client) *Resource {
 	return &Resource{client, ctrl.Log.WithName("service")}
 }
 
-func (r *Resource)IsPvCanUse(ctx context.Context,pvNameSpaceName *types.NamespacedName)(*string,bool){
+func (r *Resource) IsPvCanUse(ctx context.Context, pvNameSpaceName *types.NamespacedName) (*string, bool) {
 	var pv corev1.PersistentVolume
-	if err:=r.Get(ctx,*pvNameSpaceName,&pv);err!=nil{
-		if client.IgnoreNotFound(err)!=nil{
-			r.Log.Error(err,"get pv error")
+	if err := r.Get(ctx, *pvNameSpaceName, &pv); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			r.Log.Error(err, "get pv error")
 		}
-		return nil,false
+		return nil, false
 	}
 	// pv 是否是 Available
-	if pv.Status.Phase !=corev1.VolumeAvailable{
-		return nil,false
+	if pv.Status.Phase != corev1.VolumeAvailable {
+		return nil, false
 	}
 	// 判断 pv所在的节点是否正常
 	var nodeName string
 	if name, ok := pv.Annotations["kubevirt.io/provisionOnNode"]; ok {
 		nodeName = name
 	} else {
-		return nil,false
+		return nil, false
 	}
-	if !r.IsNodeReady(ctx,types.NamespacedName{
+	if !r.IsNodeReady(ctx, types.NamespacedName{
 		Namespace: "",
 		Name:      nodeName,
-	}){
-		return nil,false
+	}) {
+		return nil, false
 	}
-	return &nodeName,true
+	return &nodeName, true
 }
 
-func (r *Resource)IsNodeReady(ctx context.Context, nodeName types.NamespacedName) bool {
-	if nodeName.Name==""{
+func (r *Resource) IsNodeReady(ctx context.Context, nodeName types.NamespacedName) bool {
+	if nodeName.Name == "" {
 		return true
 	}
 	var node corev1.Node
 	// 判断 node 是否存在
-	if err := r.Get(ctx,nodeName,&node); err != nil {
-		if client.IgnoreNotFound(err)!=nil{
-			r.Log.Error(err,"get node error")
+	if err := r.Get(ctx, nodeName, &node); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			r.Log.Error(err, "get node error")
 		}
 		return false
 	}
@@ -103,4 +103,3 @@ func (r *Resource) SetPVCName(statefulPod *iapetosapiv1.StatefulPod, index int) 
 func (r *Resource) SetServiceName(statefulPod *iapetosapiv1.StatefulPod) string {
 	return fmt.Sprintf("%v-%v", statefulPod.Name, "service")
 }
-

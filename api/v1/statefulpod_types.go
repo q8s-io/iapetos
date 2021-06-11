@@ -37,7 +37,6 @@ type StatefulPodSpec struct {
 	PodTemplate     corev1.PodSpec                       `json:"podTemplate"`
 	PVCTemplate     *corev1.PersistentVolumeClaimSpec    `json:"pvcTemplate,omitempty"`
 	PVNames         []string                             `json:"pvNames,omitempty"`
-
 }
 
 // StatefulPodStatus defines the observed state of StatefulPod
@@ -64,7 +63,7 @@ type PVCStatus struct {
 	Capacity     string                              `json:"capacity"`
 	AccessModes  []corev1.PersistentVolumeAccessMode `json:"accessModes"`
 	StorageClass string                              `json:"storageClass"`
-	PVName string `json:"pvName"`
+	PVName       string                              `json:"pvName"`
 }
 
 // +kubebuilder:object:root=true
