@@ -7,6 +7,15 @@ spec:
   pvRecyclePolicy: "Delete"
   size: 2
   podTemplate:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/test
+                  operator: In
+                  values:
+                    - test-statefulpod
     containers:
       - name: test
         image: uhub.service.ucloud.cn/infra/nginx:1.17.9
@@ -19,7 +28,7 @@ spec:
           claimName: data
   serviceTemplate:
     selector:
-      app: v141299420
+      app: v1
       test: "true"
     clusterIP: None
     ports:
