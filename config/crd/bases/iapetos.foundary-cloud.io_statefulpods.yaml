@@ -5815,7 +5815,7 @@ spec:
                   description: externalName is the external reference that kubedns
                     or equivalent will return as a CNAME record for this service.
                     No proxying will be involved. Must be a valid RFC-1123 hostname
-                    (https://resource.ietf.org/html/rfc1123) and requires Type to be
+                    (https://tools.ietf.org/html/rfc1123) and requires Type to be
                     ExternalName.
                   type: string
                 externalTrafficPolicy:
@@ -6039,6 +6039,8 @@ spec:
                   index:
                     format: int32
                     type: integer
+                  pvName:
+                    type: string
                   pvcName:
                     type: string
                   status:
@@ -6049,6 +6051,7 @@ spec:
                 - accessModes
                 - capacity
                 - index
+                - pvName
                 - pvcName
                 - status
                 - storageClass

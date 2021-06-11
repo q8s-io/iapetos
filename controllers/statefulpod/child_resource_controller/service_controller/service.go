@@ -15,38 +15,32 @@ type ServiceController struct {
 }
 
 type ServiceContrlIntf interface {
-	CreateService(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) (bool, error)
-	RemoveServiceFinalizer(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error
+	CreateService(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) (bool)
+	//RemoveServiceFinalizer(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error
 }
 
 func NewServiceController(client client.Client) ServiceContrlIntf {
 	return &ServiceController{client}
 }
 
-func (servicectl *ServiceController) CreateService(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) (bool, error) {
-	serviceable := svcservice.NewServiceContrl(servicectl.Client)
-	serviceName := serviceable.SetServiceName(statefulPod)
-	if service, err, ok := serviceable.IsServiceExits(ctx, types.NamespacedName{
+func (servicectl *ServiceController) CreateService(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) (bool) {
+	svcHandle:=svcservice.NewPodService(servicectl.Client)
+	serviceName:=svcHandle.GetName(statefulPod,0)
+	if _,ok:=svcHandle.IsExists(ctx,types.NamespacedName{
 		Namespace: statefulPod.Namespace,
-		Name:      serviceName,
-	}); err == nil && !ok { // service 不存在，创建 service
-		serviceTemplate := serviceable.ServiceTemplate(statefulPod)
-		if err := serviceable.CreateService(ctx, serviceTemplate); err != nil {
-			return false, err
+		Name:      *serviceName,
+	});!ok{
+		svcTemplate:=svcHandle.CreateTemplate(ctx,statefulPod,"",0)
+		if _,err:=svcHandle.Create(ctx,svcTemplate);err!=nil{
+			return false
 		}
-	} else if err == nil && ok {
-		// service 创建成功，设置 finalizer 防止误删
-		if err := serviceable.SetFinalizer(ctx, service); err != nil {
-			return false, err
-		}
-		return true, nil
-	} else {
-		return false, err
+	}else {
+		return true
 	}
-	return false, nil
+	return false
 }
 
-func (servicectl *ServiceController) RemoveServiceFinalizer(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error {
+/*func (servicectl *ServiceController) RemoveServiceFinalizer(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error {
 	serviceable := svcservice.NewServiceContrl(servicectl.Client)
 	serviceName := serviceable.SetServiceName(statefulPod)
 	if service, err, ok := serviceable.IsServiceExits(ctx, types.NamespacedName{
@@ -61,4 +55,4 @@ func (servicectl *ServiceController) RemoveServiceFinalizer(ctx context.Context,
 		return err
 	}
 	return nil
-}
+}*/

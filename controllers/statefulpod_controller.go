@@ -32,6 +32,13 @@ import (
 	statefulpodctrl "github.com/q8s-io/iapetos/controllers/statefulpod"
 )
 
+const (
+	Pod = "Pod"
+	PVC= "PVC"
+	StatefulPod="StatefulPod"
+	UNKNOWN="UNKNOWN"
+)
+
 // StatefulPodReconciler reconciles a StatefulPod object
 type StatefulPodReconciler struct {
 	client.Client
@@ -50,55 +57,17 @@ type StatefulPodReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/status,verbs=get
 func (r *StatefulPodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	statefulPodLog := r.Log.WithValues("statefulpod", req.NamespacedName)
-	podLog := r.Log.WithValues("pod", req.NamespacedName)
-	pvcLog := r.Log.WithValues("pvc", req.NamespacedName)
-	var statefulPod iapetosapiv1.StatefulPod
-	var pod corev1.Pod
-	var pvc corev1.PersistentVolumeClaim
-
-	// statefulPod
-	if err := r.Get(ctx, req.NamespacedName, &statefulPod); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			statefulPodLog.Error(err, "unable to fetch statefulPod")
-			return ctrl.Result{}, err
-		}
-	} else {
-		if err := statefulpodctrl.NewStatefulPodCtrl(r.Client).CoreCtrl(ctx, &statefulPod); err != nil {
-			statefulPodLog.Error(err, "handle statefulPod error")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
+	switch obj,kind:=r.getType(ctx,req);kind {
+	case Pod:
+		pod:=obj.(*corev1.Pod)
+		return statefulpodctrl.NewStatefulPodCtrl(r.Client).MonitorPodStatus(ctx, pod)
+	case PVC:
+		pvc:=obj.(*corev1.PersistentVolumeClaim)
+		return statefulpodctrl.NewStatefulPodCtrl(r.Client).MonitorPVCStatus(ctx, pvc)
+	case StatefulPod:
+		statefulPod:=obj.(*iapetosapiv1.StatefulPod)
+		return statefulpodctrl.NewStatefulPodCtrl(r.Client).CoreCtrl(ctx, statefulPod)
 	}
-
-	// pod
-	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			podLog.Error(err, "unable to fetch pod")
-			return ctrl.Result{}, err
-		}
-	} else {
-		if err := statefulpodctrl.NewStatefulPodCtrl(r.Client).MonitorPodStatus(ctx, &pod); err != nil {
-			podLog.Error(err, "handle pod error")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	}
-
-	// PVC
-	if err := r.Get(ctx, req.NamespacedName, &pvc); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			pvcLog.Error(err, "unable to fetch pvc")
-			return ctrl.Result{}, err
-		}
-	} else {
-		if err := statefulpodctrl.NewStatefulPodCtrl(r.Client).MonitorPVCStatus(ctx, &pvc); err != nil {
-			pvcLog.Error(err, "handle pvc error")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	}
-
 	return ctrl.Result{}, nil
 }
 
@@ -111,4 +80,20 @@ func (r *StatefulPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			MaxConcurrentReconciles: 3,
 		}).
 		Complete(r)
+}
+
+func (r *StatefulPodReconciler)getType(ctx context.Context,req ctrl.Request)(interface{},string){
+	var pod corev1.Pod
+	var pvc corev1.PersistentVolumeClaim
+	var statefulPod iapetosapiv1.StatefulPod
+	if err:=r.Get(ctx,req.NamespacedName,&statefulPod);err==nil{
+		return &statefulPod,StatefulPod
+	}
+	if err:=r.Get(ctx,req.NamespacedName,&pod);err==nil{
+		return &pod,Pod
+	}
+	if err:=r.Get(ctx,req.NamespacedName,&pvc);err==nil{
+		return &pvc,PVC
+	}
+	return nil,UNKNOWN
 }

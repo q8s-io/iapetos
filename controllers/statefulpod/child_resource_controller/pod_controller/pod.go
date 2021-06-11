@@ -2,7 +2,6 @@ package pod_controller
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -10,10 +9,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
+	"github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pvc_controller"
 	resourcecfg "github.com/q8s-io/iapetos/initconfig"
-	nodeservice "github.com/q8s-io/iapetos/services/node"
+	"github.com/q8s-io/iapetos/services"
 	podservice "github.com/q8s-io/iapetos/services/pod"
-	pvservice "github.com/q8s-io/iapetos/services/pv"
 	pvcservice "github.com/q8s-io/iapetos/services/pvc"
 )
 
@@ -21,10 +20,15 @@ type PodCtrl struct {
 	client.Client
 }
 
+const  (
+	Preparing   = corev1.PodPhase("Preparing")
+	Deleting    = corev1.PodPhase("Deleting")
+)
+
 type PodCtrlFunc interface {
 	ExpansionPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (*iapetosapiv1.PodStatus, error)
-	ShrinkPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (bool, error)
-	DeletePodAll(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error
+	ShrinkPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) ( bool)
+	DeletePodAll(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) bool
 	MaintainPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) *int
 	MonitorPodStatus(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, pod *corev1.Pod, index *int) bool
 	PodIsOk(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) *int
@@ -38,33 +42,39 @@ func NewPodCtrl(client client.Client) PodCtrlFunc {
 
 func (podctrl *PodCtrl) IsCreationTimeout(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) bool {
 	podHandler := podservice.NewPodService(podctrl.Client)
-	podName := fmt.Sprintf("%v-%v", statefulPod.Name, index)
 	pvcHandler := pvcservice.NewPVCService(podctrl.Client)
-	pvcName := pvcHandler.SetPVCName(statefulPod, index)
-	if pod, err, ok := podHandler.IsPodExist(ctx, types.NamespacedName{
+	podName:=podHandler.GetName(statefulPod,index)
+	if obj,  ok := podHandler.IsExists(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
-		Name:      podName,
-	}); err == nil && ok {
+		Name:      *podName,
+	}); ok {
+		pod := obj.(*corev1.Pod)
 		if pod.Status.Phase != corev1.PodRunning && time.Now().Sub(pod.CreationTimestamp.Time) >= time.Second*time.Duration(resourcecfg.StatefulPodResourceCfg.Pod.Timeout) {
+			// 删除pod
 			if pod.DeletionTimestamp.IsZero() {
-				if err := podHandler.DeletePod(ctx, pod); err != nil {
+				if err := podHandler.Delete(ctx, pod); err != nil {
 					return false
 				}
-				if pvc, err, ok := pvcHandler.IsPVCExist(ctx, types.NamespacedName{
-					Namespace: statefulPod.Namespace,
-					Name:      pvcName,
-				}); err == nil && ok { // pvc 存在，删除 pvc
-					if err := pvcHandler.DeletePVC(ctx, pvc); err != nil {
-						return false
+				// 如果pvc存在
+				if statefulPod.Spec.PVCTemplate!=nil{ // pvc 存在，删除 pvc
+					pvcName:=pvcHandler.GetName(statefulPod,index)
+					if pvc,ok:=pvcHandler.IsExists(ctx,types.NamespacedName{
+						Namespace: statefulPod.Namespace,
+						Name:      *pvcName,
+					});ok {
+						if err := pvcHandler.Delete(ctx, pvc); err != nil {
+							return false
+						}
 					}
 				}
-				return true
-			} else {
-				return true
+				statefulPod.Status.PodStatusMes=statefulPod.Status.PodStatusMes[:index]
+				statefulPod.Status.PVCStatusMes=statefulPod.Status.PVCStatusMes[:index]
 			}
+		}else {
+			return true
 		}
-	} else if err != nil {
-		return false
+	}else {
+		return true
 	}
 	return false
 }
@@ -72,122 +82,91 @@ func (podctrl *PodCtrl) IsCreationTimeout(ctx context.Context, statefulPod *iape
 // 扩容 pod
 func (podctrl *PodCtrl) ExpansionPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (*iapetosapiv1.PodStatus, error) {
 	podHandler := podservice.NewPodService(podctrl.Client)
-	podName := fmt.Sprintf("%v-%v", statefulPod.Name, index)
+	podName := podHandler.GetName(statefulPod,index)
 	podIndex := int32(index)
-
-	if _, err, ok := podHandler.IsPodExist(ctx, types.NamespacedName{
+	if _,ok := podHandler.IsExists(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
-		Name:      podName,
-	}); !ok && err == nil { // pod 不存在，创建 pod
-		pod := podHandler.PodTempale(ctx, statefulPod, podName, index)
-		if err := podHandler.CreatePod(ctx, pod); err != nil {
+		Name:      *podName,
+	}); !ok  { // pod 不存在，创建 pod
+		podTemplate := podHandler.CreateTemplate(ctx, statefulPod, *podName, index)
+		obj,err := podHandler.Create(ctx, podTemplate)
+		// 创建失败
+		if err != nil {
 			return nil, err
 		}
+		// 记录pod的status
 		podStatus := &iapetosapiv1.PodStatus{
-			PodName: pod.Name,
-			Status:  podservice.Preparing,
+			PodName: obj.(*corev1.Pod).Name,
+			Status:  Preparing,
 			Index:   &podIndex,
 		}
 		return podStatus, nil
 		// pod 存在，podStatus 不变
-	} else if ok && err == nil {
+	} else  {
 		podStatus := statefulPod.Status.PodStatusMes[index]
-		return &podStatus, err
-	} else {
-		return nil, err
+		return &podStatus, nil
 	}
 }
 
 // 缩容 pod
-func (podctrl *PodCtrl) ShrinkPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (bool, error) {
-	podName := fmt.Sprintf("%v-%v", statefulPod.Name, index-1)
-
+func (podctrl *PodCtrl) ShrinkPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (bool) {
 	podHandler := podservice.NewPodService(podctrl.Client)
-	if pod, err, ok := podHandler.IsPodExist(ctx, types.NamespacedName{
+	podName:=podHandler.GetName(statefulPod,index)
+	if pod, ok := podHandler.IsExists(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
-		Name:      podName,
-	}); err == nil && ok { // 若 pod 正在被删除则不再删除
-		if podHandler.JudgmentPodDel(pod) {
-			return false, nil
-		}
-		if err := podHandler.DeletePod(ctx, pod); err != nil {
-			return false, err
+		Name:      *podName,
+	}); ok {
+		if err := podHandler.Delete(ctx, pod); err != nil {
+			return false
 		}
 		// pod 删除完毕
-	} else if err == nil && !ok {
-		return true, nil
 	} else {
-		return false, err
+		return  true
 	}
-
-	return false, nil
+	return  false
 }
 
-func (podctrl *PodCtrl) DeletePodAll(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) error {
+func (podctrl *PodCtrl) DeletePodAll(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) bool {
 	podHandler := podservice.NewPodService(podctrl.Client)
 	pvcHandler := pvcservice.NewPVCService(podctrl.Client)
-	pvHandler := pvservice.NewPVService(podctrl.Client)
-
+	sum:=0
 	for i, v := range statefulPod.Status.PodStatusMes {
-		if pod, err, ok := podHandler.IsPodExist(ctx, types.NamespacedName{
+		if pod, ok := podHandler.IsExists(ctx, types.NamespacedName{
 			Namespace: statefulPod.Namespace,
 			Name:      v.PodName,
-		}); err == nil && ok { // pod 存在，删除 pod
-			if err := podHandler.DeletePod(ctx, pod); err != nil {
-				return err
+		}); ok { // pod 存在，删除 pod
+			if err := podHandler.Delete(ctx, pod); err != nil {
+				return false
 			}
-			pvcName := pvcHandler.SetPVCName(statefulPod, i)
-			if pvc, err, ok := pvcHandler.IsPVCExist(ctx, types.NamespacedName{
+			// pod删除完毕删除pvc
+			pvcName := pvcHandler.GetName(statefulPod, i)
+			if obj, ok := pvcHandler.IsExists(ctx, types.NamespacedName{
 				Namespace: statefulPod.Namespace,
-				Name:      pvcName,
+				Name:      *pvcName,
 				// pvc 存在，删除 pvc
-			}); err == nil && ok {
-				// 判断 pv 策略是否为回收策略
-				if statefulPod.Spec.PVRecyclePolicy == corev1.PersistentVolumeReclaimRetain {
-					pvName := pvc.Spec.VolumeName
-					if err := pvHandler.SetPVRetain(ctx, &pvName); err != nil { // 将 pv 策略设置为回收策略
-						return err
-					}
-					// 删除 pvc
-					if err := pvcHandler.DeletePVC(ctx, pvc); err != nil {
-						return err
-					}
-					// 等待 pvc 删除完毕
-					for {
-						if _, err, ok := pvcHandler.IsPVCExist(ctx, types.NamespacedName{
-							Namespace: pvc.Namespace,
-							Name:      pvc.Name,
-						}); err == nil && !ok { // pvc 删除完毕，退出
-							break
-						}
-					}
-					// 将 pv 设置为可用
-					if err := pvHandler.SetVolumeAvailable(ctx, &pvName); err != nil {
-						return err
-					}
-				} else {
-					// 直接删除 pvc
-					if err := pvcHandler.DeletePVC(ctx, pvc); err != nil {
-						return err
-					}
+			}); ok {
+				pvc := obj.(*corev1.PersistentVolumeClaim)
+				if err := pvcHandler.Delete(ctx, pvc); err != nil {
+					return false
 				}
-			} else if err != nil {
-				return err
 			}
-		} else if err != nil {
-			return err
+		}else { // pvc已经被删除
+			sum++
 		}
 	}
-
-	return nil
+	if sum==len(statefulPod.Status.PVCStatusMes){
+		return true
+	}
+	return false
 }
+
 
 func (podctrl *PodCtrl) MaintainPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) *int {
 	podHandler := podservice.NewPodService(podctrl.Client)
 	for i, pod := range statefulPod.Status.PodStatusMes {
 		// 如果 statefulPod.status.podstatusmes 的状态为 deleting，pod 不存在，返回 pod 索引
-		if pod.Status == podservice.Deleting {
-			if _, err, ok := podHandler.IsPodExist(ctx, types.NamespacedName{Namespace: statefulPod.Namespace, Name: pod.PodName}); err == nil && !ok {
+		if pod.Status == Deleting {
+			if _,  ok := podHandler.IsExists(ctx, types.NamespacedName{Namespace: statefulPod.Namespace, Name: pod.PodName});!ok {
 				return &i
 			}
 		}
@@ -198,12 +177,17 @@ func (podctrl *PodCtrl) MaintainPod(ctx context.Context, statefulPod *iapetosapi
 func (podctrl *PodCtrl) PodIsOk(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) *int {
 	podHandler := podservice.NewPodService(podctrl.Client)
 	for i, podMsg := range statefulPod.Status.PodStatusMes {
-		if _, _, ok := podHandler.IsPodExist(ctx, types.NamespacedName{
+		if _, ok := podHandler.IsExists(ctx, types.NamespacedName{
 			Namespace: statefulPod.Namespace,
 			Name:      podMsg.PodName,
 		}); !ok {
-			statefulPod.Status.PodStatusMes[i].Status = podservice.Deleting
+			statefulPod.Status.PodStatusMes[i].Status = Deleting
 			return &i
+		}else {
+			if podMsg.Status==corev1.PodRunning && statefulPod.Status.PodStatusMes[i].Status!=corev1.PodRunning{
+				statefulPod.Status.PodStatusMes[i].Status=corev1.PodRunning
+				return &i
+			}
 		}
 	}
 	return nil
@@ -214,32 +198,41 @@ func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapet
 		return false
 	}
 	podHandler := podservice.NewPodService(podctrl.Client)
-	nodeHandler := nodeservice.NewNodeService(podctrl.Client)
+	pvcHandler:=pvcservice.NewPVCService(podctrl.Client)
 	//pvcHandler := pvcservice.NewPVCService(podctrl.Client)
-
-	if podHandler.JudgmentPodDel(pod) {
+	resourceHandle:=services.NewResource(podctrl.Client)
+	if !pod.DeletionTimestamp.IsZero() {
 		// 设置过 deleting 状态则不再进行设置
-		if statefulPod.Status.PodStatusMes[*index].Status == podservice.Deleting {
+		if statefulPod.Status.PodStatusMes[*index].Status == Deleting {
 			return false
 		}
-		statefulPod.Status.PodStatusMes[*index].Status = podservice.Deleting
+		statefulPod.Status.PodStatusMes[*index].Status = Deleting
 		return true
 	}
 
 	// node Unhealthy
-	if !nodeHandler.IsNodeReady(ctx, pod.Spec.NodeName) {
-		// pod 是否需要删除
-		if podHandler.JudgmentPodDel(pod) {
-			return false
-		}
+	if !resourceHandle.IsNodeReady(ctx, types.NamespacedName{
+		Namespace: "",
+		Name:      pod.Spec.NodeName,
+	}) {
 		// 立即删除 pod
-		if err := podHandler.DeletePodMandatory(ctx, pod, statefulPod); err != nil {
+		if err := podHandler.DeleteMandatory(ctx, pod, statefulPod); err != nil {
 			return false
-		} else {
-			statefulPod.Status.PodStatusMes[*index].Status = podservice.Deleting
-			statefulPod.Status.PVCStatusMes[*index].Status = pvcservice.Deleting
-			return true
 		}
+		if statefulPod.Spec.PVCTemplate!=nil{
+			if obj,ok:=pvcHandler.IsExists(ctx,types.NamespacedName{
+				Namespace: statefulPod.Namespace,
+				Name:      *pvcHandler.GetName(statefulPod,*index),
+			});ok{
+				pvc:=obj.(*corev1.PersistentVolumeClaim)
+				if err:=pvcHandler.DeleteMandatory(ctx,pvc,statefulPod);err!=nil{
+					return false
+				}
+			}
+		}
+		statefulPod.Status.PodStatusMes[*index].Status = Deleting
+		statefulPod.Status.PVCStatusMes[*index].Status = pvc_controller.Deleting
+		return true
 	}
 
 	// pod running
@@ -252,34 +245,5 @@ func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapet
 		statefulPod.Status.PodStatusMes[*index].NodeName = pod.Spec.NodeName
 		return true
 	}
-
-	// create pod timeout
-	/*if pod.Status.Phase != corev1.PodRunning && time.Now().Sub(pod.CreationTimestamp.Time) >= time.Second*time.Duration(resourcecfg.StatefulPodResourceCfg.Pod.Timeout) {
-		if err := podHandler.DeletePod(ctx, pod); err != nil {
-			return false
-		}
-		pvcName := pvcHandler.SetPVCName(statefulPod, *index)
-		if pvc, err, ok := pvcHandler.IsPVCExist(ctx, types.NamespacedName{
-			Namespace: statefulPod.Namespace,
-			Name:      pvcName,
-		}); err == nil && ok { // pvc 存在，删除 pvc
-			if err := pvcHandler.DeletePVC(ctx, pvc); err != nil {
-				return false
-			}
-		} else if err != nil {
-			return false
-		}
-		// 维护时重新拉起 pod 超时
-		if len(statefulPod.Status.PodStatusMes) < int(*statefulPod.Spec.Size){
-			fmt.Println("oldIndex----------------------",*index)
-			statefulPod.Status.PodStatusMes = statefulPod.Status.PodStatusMes[:*index]
-			statefulPod.Status.PVCStatusMes = statefulPod.Status.PVCStatusMes[:*index]
-			newIndex:=*index-1
-			index=&newIndex
-			fmt.Println("newIndex-----------------------------",*index)
-		}
-		return true
-	}*/
-
 	return false
 }
