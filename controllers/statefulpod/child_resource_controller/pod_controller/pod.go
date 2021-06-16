@@ -2,6 +2,7 @@ package pod_controller
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -21,8 +22,10 @@ type PodCtrl struct {
 }
 
 const (
-	Preparing = corev1.PodPhase("Preparing")
-	Deleting  = corev1.PodPhase("Deleting")
+	Preparing     = corev1.PodPhase("Preparing")
+	Deleting      = corev1.PodPhase("Deleting")
+	CreateTimeOut = corev1.PodPhase("CreateTimeOut")
+	//TimeOutIndex="TimeOutIndex"
 )
 
 type PodCtrlFunc interface {
@@ -32,7 +35,8 @@ type PodCtrlFunc interface {
 	MaintainPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) *int
 	MonitorPodStatus(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, pod *corev1.Pod, index *int) bool
 	PodIsOk(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) *int
-	IsCreationTimeout(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) bool
+	//IsCreationPodTimeout(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) bool
+	IsPodDeleting(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) bool
 	//CodbPodReady(ctx context.Context,statefulPod *iapetosapiv1.StatefulPod)(error)
 }
 
@@ -40,37 +44,18 @@ func NewPodCtrl(client client.Client) PodCtrlFunc {
 	return &PodCtrl{client}
 }
 
-func (podctrl *PodCtrl) IsCreationTimeout(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) bool {
+func (podctrl *PodCtrl) IsPodDeleting(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) bool {
+	if index <= 0 {
+		return false
+	}
+	index--
 	podHandler := podservice.NewPodService(podctrl.Client)
-	pvcHandler := pvcservice.NewPVCService(podctrl.Client)
-	podName := podHandler.GetName(statefulPod, index)
 	if obj, ok := podHandler.IsExists(ctx, types.NamespacedName{
 		Namespace: statefulPod.Namespace,
-		Name:      *podName,
+		Name:      *podHandler.GetName(statefulPod, index),
 	}); ok {
-		pod := obj.(*corev1.Pod)
-		if pod.Status.Phase != corev1.PodRunning && time.Now().Sub(pod.CreationTimestamp.Time) >= time.Second*time.Duration(resourcecfg.StatefulPodResourceCfg.Pod.Timeout) {
-			// 删除pod
-			if pod.DeletionTimestamp.IsZero() {
-				if err := podHandler.Delete(ctx, pod); err != nil {
-					return false
-				}
-				// 如果pvc存在
-				if statefulPod.Spec.PVCTemplate != nil { // pvc 存在，删除 pvc
-					pvcName := pvcHandler.GetName(statefulPod, index)
-					if pvc, ok := pvcHandler.IsExists(ctx, types.NamespacedName{
-						Namespace: statefulPod.Namespace,
-						Name:      *pvcName,
-					}); ok {
-						if err := pvcHandler.Delete(ctx, pvc); err != nil {
-							return false
-						}
-					}
-				}
-				statefulPod.Status.PodStatusMes = statefulPod.Status.PodStatusMes[:index]
-				statefulPod.Status.PVCStatusMes = statefulPod.Status.PVCStatusMes[:index]
-			}
-		} else {
+		lastPod := obj.(*corev1.Pod)
+		if !lastPod.DeletionTimestamp.IsZero() {
 			return true
 		}
 	} else {
@@ -78,6 +63,7 @@ func (podctrl *PodCtrl) IsCreationTimeout(ctx context.Context, statefulPod *iape
 	}
 	return false
 }
+
 
 // 扩容 pod
 func (podctrl *PodCtrl) ExpansionPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (*iapetosapiv1.PodStatus, error) {
@@ -103,6 +89,9 @@ func (podctrl *PodCtrl) ExpansionPod(ctx context.Context, statefulPod *iapetosap
 		return podStatus, nil
 		// pod 存在，podStatus 不变
 	} else {
+		if index >= len(statefulPod.Status.PodStatusMes) {
+			return nil, errors.New("")
+		}
 		podStatus := statefulPod.Status.PodStatusMes[index]
 		return &podStatus, nil
 	}
@@ -128,9 +117,8 @@ func (podctrl *PodCtrl) ShrinkPod(ctx context.Context, statefulPod *iapetosapiv1
 
 func (podctrl *PodCtrl) DeletePodAll(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) bool {
 	podHandler := podservice.NewPodService(podctrl.Client)
-	pvcHandler := pvcservice.NewPVCService(podctrl.Client)
 	sum := 0
-	for i, v := range statefulPod.Status.PodStatusMes {
+	for _, v := range statefulPod.Status.PodStatusMes {
 		if pod, ok := podHandler.IsExists(ctx, types.NamespacedName{
 			Namespace: statefulPod.Namespace,
 			Name:      v.PodName,
@@ -138,19 +126,7 @@ func (podctrl *PodCtrl) DeletePodAll(ctx context.Context, statefulPod *iapetosap
 			if err := podHandler.Delete(ctx, pod); err != nil {
 				return false
 			}
-			// pod删除完毕删除pvc
-			pvcName := pvcHandler.GetName(statefulPod, i)
-			if obj, ok := pvcHandler.IsExists(ctx, types.NamespacedName{
-				Namespace: statefulPod.Namespace,
-				Name:      *pvcName,
-				// pvc 存在，删除 pvc
-			}); ok {
-				pvc := obj.(*corev1.PersistentVolumeClaim)
-				if err := pvcHandler.Delete(ctx, pvc); err != nil {
-					return false
-				}
-			}
-		} else { // pvc已经被删除
+		} else {
 			sum++
 		}
 	}
@@ -202,7 +178,7 @@ func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapet
 	resourceHandle := services.NewResource(podctrl.Client)
 	if !pod.DeletionTimestamp.IsZero() {
 		// 设置过 deleting 状态则不再进行设置
-		if statefulPod.Status.PodStatusMes[*index].Status == Deleting {
+		if statefulPod.Status.PodStatusMes[*index].Status == Deleting || statefulPod.Status.PodStatusMes[*index].Status == CreateTimeOut {
 			return false
 		}
 		statefulPod.Status.PodStatusMes[*index].Status = Deleting
@@ -242,6 +218,36 @@ func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapet
 		statefulPod.Status.PodStatusMes[*index].PodName = pod.Name
 		statefulPod.Status.PodStatusMes[*index].Status = corev1.PodRunning
 		statefulPod.Status.PodStatusMes[*index].NodeName = pod.Spec.NodeName
+		return true
+	}
+
+	if statefulPod.Status.PodStatusMes[*index].Status == CreateTimeOut {
+		if err := podHandler.Delete(ctx, pod); err != nil {
+			return false
+		}
+		if obj, ok := pvcHandler.IsExists(ctx, types.NamespacedName{
+			Namespace: pod.Namespace,
+			Name:      *pvcHandler.GetName(statefulPod, *index),
+		}); ok {
+			pvc := obj.(*corev1.PersistentVolumeClaim)
+		DELETEPVC: // 等待pvc删除完毕，这里不是幂等关系，一次一定要等pvc删除成功
+			if err := pvcHandler.Delete(ctx, pvc); err != nil {
+				goto DELETEPVC
+			}
+		}
+		// 初始化创建时超时
+		if *index == len(statefulPod.Status.PodStatusMes)-1 {
+			statefulPod.Status.PodStatusMes = statefulPod.Status.PodStatusMes[:*index]
+			statefulPod.Status.PVCStatusMes = statefulPod.Status.PVCStatusMes[:*index]
+		} else { // 维护创建时超时
+			statefulPod.Status.PodStatusMes[*index].Status = Deleting
+			statefulPod.Status.PVCStatusMes[*index].Status = pvc_controller.Deleting
+		}
+		return true
+	}
+	// pod创建超时
+	if pod.Status.Phase != corev1.PodRunning && time.Now().Sub(pod.CreationTimestamp.Time) >= time.Second*time.Duration(resourcecfg.StatefulPodResourceCfg.Pod.Timeout) {
+		statefulPod.Status.PodStatusMes[*index].Status = CreateTimeOut
 		return true
 	}
 	return false

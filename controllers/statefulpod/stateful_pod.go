@@ -47,11 +47,9 @@ func (s *StatefulPodCtrl) CoreCtrl(ctx context.Context, statefulPod *iapetosapiv
 	if !statefulPod.DeletionTimestamp.IsZero() {
 		return s.deleteStatefulPod(ctx, statefulPod)
 	}
-	lenStatus := len(statefulPod.Status.PodStatusMes)
+	lenStatus := s.getIndex(statefulPod)
 	lenSpec := int(*statefulPod.Spec.Size)
-	if lenStatus != 0 && (statefulPod.Status.PodStatusMes[lenStatus-1].Status == podctrl.Preparing || statefulPod.Status.PVCStatusMes[lenStatus-1].Status == corev1.ClaimPending) {
-		lenStatus--
-	}
+
 	if lenStatus < lenSpec {
 		return s.expansion(ctx, statefulPod, lenStatus)
 	} else if lenStatus > lenSpec {
@@ -62,6 +60,23 @@ func (s *StatefulPodCtrl) CoreCtrl(ctx context.Context, statefulPod *iapetosapiv
 		}
 		return s.maintain(ctx, statefulPod)
 	}
+}
+
+func (s *StatefulPodCtrl) getIndex(statefulPod *iapetosapiv1.StatefulPod) int {
+	index := len(statefulPod.Status.PodStatusMes) - 1
+	if index < 0 {
+		return 0
+	}
+	if statefulPod.Status.PodStatusMes[index].Status == corev1.PodPhase("CreateTimeOut") {
+		return index
+	}
+	if statefulPod.Status.PodStatusMes[index].Status == corev1.PodPhase("Preparing") {
+		return index
+	}
+	if statefulPod.Status.PVCStatusMes[index].Status == corev1.ClaimPending {
+		return index
+	}
+	return index + 1
 }
 
 func (s *StatefulPodCtrl) deleteStatefulPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) (ctrl.Result, error) {
@@ -75,8 +90,12 @@ func (s *StatefulPodCtrl) deleteStatefulPod(ctx context.Context, statefulPod *ia
 		if !pvCtrl.SetPVRetain(ctx, statefulPod) {
 			return ctrl.Result{RequeueAfter: WaitTime}, nil
 		}
-		// 删除所有pod pvc，
+		// 删除所有pod
 		if !podctrl.NewPodCtrl(s.Client).DeletePodAll(ctx, statefulPod) {
+			return ctrl.Result{RequeueAfter: WaitTime}, nil
+		}
+		// 删除所有pvc
+		if !pvcctrl.NewPVCCtrl(s.Client).DeletePvcAll(ctx, statefulPod) {
 			return ctrl.Result{RequeueAfter: WaitTime}, nil
 		}
 		// 将所有pv置为Available
@@ -99,11 +118,6 @@ func (s *StatefulPodCtrl) deleteStatefulPod(ctx context.Context, statefulPod *ia
 // index == len(statefulPod.Status.PodStatusMes) 代表创建
 // index != len(statefulPod.Status.PodStatusMes) 代表维护
 func (s *StatefulPodCtrl) expansion(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (ctrl.Result, error) {
-	defer func() {
-		if recover() != nil {
-			time.Sleep(time.Second)
-		}
-	}()
 	var podStatus *iapetosapiv1.PodStatus
 	var pvcStatus *iapetosapiv1.PVCStatus
 	var err error
@@ -121,20 +135,11 @@ func (s *StatefulPodCtrl) expansion(ctx context.Context, statefulPod *iapetosapi
 		}
 	}
 	if podStatus, err = podCtrl.ExpansionPod(ctx, statefulPod, index); err != nil {
-		return ctrl.Result{Requeue: true}, err
-	}
-	// 判断pod是否创建超时，若超时删除pod，pvc
-	if !podCtrl.IsCreationTimeout(ctx, statefulPod, index) {
-		if _, err := statefulPodHandler.Update(ctx, statefulPod); err != nil {
-			return ctrl.Result{
-				RequeueAfter: WaitTime,
-			}, nil
-		}
-		return ctrl.Result{RequeueAfter: time.Second * 2}, nil
+		return ctrl.Result{Requeue: true}, nil
 	}
 	if statefulPod.Spec.PVCTemplate != nil {
 		if pvcStatus, err = pvcCtrl.ExpansionPVC(ctx, statefulPod, index); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 	} else {
 		pvcStatus = &iapetosapiv1.PVCStatus{

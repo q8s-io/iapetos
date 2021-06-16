@@ -2,7 +2,6 @@ package statefulpod
 
 import (
 	"context"
-	"errors"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -75,23 +74,31 @@ func (sfp *StatefulPodService) Create(ctx context.Context, obj interface{}) (int
 
 func (sfp *StatefulPodService) Update(ctx context.Context, obj interface{}) (interface{}, error) {
 	statefulPod := obj.(*iapetosapiv1.StatefulPod)
-	if sfp.IsResourceVersionSame(ctx, statefulPod) {
-		if err := sfp.Client.Update(ctx, statefulPod); err != nil {
-			sfp.Log.Error(err, "update statefulPod error")
-			return nil, err
-		}
-	} else {
-		sfp.Log.Error(errors.New(""), services.ResourceVersionUnSame)
-		return nil, errors.New("")
+Update:
+	if err := sfp.Client.Update(ctx, statefulPod); err != nil && client.IgnoreNotFound(err) != nil {
+		sfp.getNewResourceVersion(ctx, statefulPod)
+		goto Update
 	}
 	return statefulPod, nil
 }
 
 func (sfp *StatefulPodService) Delete(ctx context.Context, obj interface{}) error {
 	statefulPod := obj.(*iapetosapiv1.StatefulPod)
-	if err := sfp.Client.Delete(ctx, statefulPod); err != nil {
+	if err := sfp.Client.Delete(ctx, statefulPod); err != nil && client.IgnoreNotFound(err) != nil {
 		sfp.Log.Error(err, "delete statefulPod error")
 		return err
 	}
 	return nil
+}
+
+func (sfp *StatefulPodService) getNewResourceVersion(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) {
+	var newStatefulPod iapetosapiv1.StatefulPod
+	if err := sfp.Client.Get(ctx, types.NamespacedName{
+		Namespace: statefulPod.Namespace,
+		Name:      statefulPod.Name,
+	}, &newStatefulPod); err != nil {
+		return
+	}
+	statefulPod.ResourceVersion = newStatefulPod.ResourceVersion
+	return
 }

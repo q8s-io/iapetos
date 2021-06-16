@@ -112,7 +112,7 @@ func (svc *Service) Update(ctx context.Context, obj interface{}) (interface{}, e
 
 func (svc *Service) Delete(ctx context.Context, obj interface{}) error {
 	service := obj.(*corev1.Service)
-	if err := svc.Client.Delete(ctx, service); err != nil {
+	if err := svc.Client.Delete(ctx, service); err != nil && client.IgnoreNotFound(err) != nil {
 		svc.Log.Error(err, "delete service error")
 		return err
 	}

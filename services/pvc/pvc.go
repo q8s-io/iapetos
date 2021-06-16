@@ -130,7 +130,7 @@ func (pvc *PVCService) Update(ctx context.Context, obj interface{}) (interface{}
 
 func (pvc *PVCService) Delete(ctx context.Context, obj interface{}) error {
 	pvcObj := obj.(*corev1.PersistentVolumeClaim)
-	if err := pvc.Client.Delete(ctx, pvcObj); err != nil {
+	if err := pvc.Client.Delete(ctx, pvcObj); err != nil && client.IgnoreNotFound(err) != nil {
 		pvc.Log.Error(err, "delete pvc error")
 		return err
 	}

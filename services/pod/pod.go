@@ -123,7 +123,7 @@ func (p *PodService) Update(ctx context.Context, obj interface{}) (interface{}, 
 
 func (p *PodService) Delete(ctx context.Context, obj interface{}) error {
 	pod := obj.(*corev1.Pod)
-	if err := p.Client.Delete(ctx, pod); err != nil {
+	if err := p.Client.Delete(ctx, pod); err != nil && client.IgnoreNotFound(err) != nil {
 		p.Log.Error(err, "delete pod error")
 		return err
 	}

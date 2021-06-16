@@ -2,5 +2,5 @@
 timeout=5
 
 [podConfig]
-timeout=60
+timeout=5
 ready=120
