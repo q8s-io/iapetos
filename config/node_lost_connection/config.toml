@@ -1,6 +1,6 @@
 [nodeConfig]
-timeout=5
+timeout=30
 
 [podConfig]
-timeout=5
+timeout=60
 ready=120
