@@ -1,9 +1,10 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= uhub.service.ucloud.cn/infra/statefulpod:v1
+IMG ?= uhub.service.ucloud.cn/infra/statefulpod:v2
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
-
+PWD ?= $(shell pwd)
+E2E_CONCURRENCY ?= 1
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -78,3 +79,18 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+basic-test:
+	cd $(PWD)/test/e2e && ginkgo --focus=/statefulpod/basic/ --regexScansFilePath=true
+
+pvc-test:
+	cd $(PWD)/test/e2e && ginkgo --focus=/statefulpod/withpvc/ --regexScansFilePath=true
+
+service-test:
+	cd $(PWD)/test/e2e && ginkgo --focus=/statefulpod/withservice/ --regexScansFilePath=true
+
+prepare:
+	kubectl apply -f $(PWD)/deploy/rbac.yaml
+	kubectl apply -f $(PWD)/deploy/iapetos.foundary-cloud.io_statefulpods.yaml
+	kubectl apply -f $(PWD)/deploy/deployment.yaml
+	kubectl create ns ldy

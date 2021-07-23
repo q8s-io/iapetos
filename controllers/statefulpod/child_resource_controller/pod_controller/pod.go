@@ -64,7 +64,6 @@ func (podctrl *PodCtrl) IsPodDeleting(ctx context.Context, statefulPod *iapetosa
 	return false
 }
 
-
 // 扩容 pod
 func (podctrl *PodCtrl) ExpansionPod(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod, index int) (*iapetosapiv1.PodStatus, error) {
 	podHandler := podservice.NewPodService(podctrl.Client)

@@ -44,11 +44,11 @@ func NewStatefulPodCtrl(client client.Client) StatefulPodCtrlFunc {
 // len(statefulPod.Status.PodStatusMes) > int(*statefulPod.Spec.Size) 缩容
 // len(statefulPod.Status.PodStatusMes) == int(*statefulPod.Spec.Size) 设置 Finalizer，维护
 func (s *StatefulPodCtrl) CoreCtrl(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) (ctrl.Result, error) {
-	if !statefulPod.DeletionTimestamp.IsZero() {
-		return s.deleteStatefulPod(ctx, statefulPod)
-	}
 	lenStatus := s.getIndex(statefulPod)
 	lenSpec := int(*statefulPod.Spec.Size)
+	if !statefulPod.DeletionTimestamp.IsZero() && lenStatus == lenSpec {
+		return s.deleteStatefulPod(ctx, statefulPod)
+	}
 
 	if lenStatus < lenSpec {
 		return s.expansion(ctx, statefulPod, lenStatus)
@@ -176,8 +176,10 @@ func (s *StatefulPodCtrl) shrink(ctx context.Context, statefulPod *iapetosapiv1.
 		return ctrl.Result{RequeueAfter: WaitTime}, nil
 	}
 	// 判断 pvc 是否删除完毕,如果删除失败或者刚刚创建，等待5秒
-	if ok := pvcCtrl.ShrinkPVC(ctx, statefulPod, index-1); !ok {
-		return ctrl.Result{RequeueAfter: WaitTime}, nil
+	if statefulPod.Spec.PVCTemplate != nil {
+		if ok := pvcCtrl.ShrinkPVC(ctx, statefulPod, index-1); !ok {
+			return ctrl.Result{RequeueAfter: WaitTime}, nil
+		}
 	}
 	statefulPod.Status.PodStatusMes = statefulPod.Status.PodStatusMes[:index-1]
 	statefulPod.Status.PVCStatusMes = statefulPod.Status.PVCStatusMes[:index-1]

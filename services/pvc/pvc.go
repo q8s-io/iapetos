@@ -64,6 +64,9 @@ func (pvc *PVCService) CreateTemplate(ctx context.Context, statefulPod *iapetosa
 				services.ParentNmae:                statefulPod.Name,
 				services.Index:                     strconv.Itoa(index),
 			},
+			Labels: map[string]string{
+				services.ParentNmae: statefulPod.Name,
+			},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(statefulPod, schema.GroupVersionKind{
 					Group:   iapetosapiv1.GroupVersion.Group,
