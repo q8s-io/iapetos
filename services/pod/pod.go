@@ -39,11 +39,6 @@ func (p *PodService) CreateTemplate(ctx context.Context, statefulPod *iapetosapi
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: statefulPod.Namespace,
-			Annotations: map[string]string{
-				iapetosapiv1.GroupVersion.String(): "true",
-				services.ParentNmae:                statefulPod.Name,
-				services.Index:                     fmt.Sprintf("%v", index),
-			},
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(statefulPod, schema.GroupVersionKind{
 					Group:   iapetosapiv1.GroupVersion.Group,
@@ -57,7 +52,7 @@ func (p *PodService) CreateTemplate(ctx context.Context, statefulPod *iapetosapi
 	// 添加 hostname subdomain 用于 dns 发现
 	pod.Spec.Hostname = name
 	// 添加annotation
-	p.addAnnotations(statefulPod, &pod)
+	p.addAnnotations(statefulPod, &pod,index)
 	// 设置pvc
 	p.setPvc(statefulPod, &pod, index)
 	// 设置 labels
@@ -144,10 +139,14 @@ func (p *PodService) DeleteMandatory(ctx context.Context, obj interface{}, state
 }
 
 // 添加annotation 用于扩展
-func (p *PodService) addAnnotations(statefulPod *iapetosapiv1.StatefulPod, pod *corev1.Pod) {
-	if _, ok := statefulPod.Annotations[cockrochDB]; ok {
-		pod.Annotations[cockrochDB] = "true"
+func (p *PodService) addAnnotations(statefulPod *iapetosapiv1.StatefulPod, pod *corev1.Pod,index int) {
+	pod.Annotations=statefulPod.Annotations
+	if pod.Annotations==nil{
+		pod.Annotations= map[string]string{}
 	}
+	pod.Annotations[iapetosapiv1.GroupVersion.String()]="true"
+	pod.Annotations[services.ParentNmae]=statefulPod.Name
+	pod.Annotations[services.Index]=fmt.Sprintf("%v", index)
 }
 
 // 用于webhook校验
