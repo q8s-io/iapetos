@@ -23,7 +23,6 @@ func NewPVService(client client.Client) services.ServiceInf {
 }
 
 func (pv *PVService) GetName(statefulPod *iapetosapiv1.StatefulPod, index int) *string {
-
 	return &statefulPod.Status.PVCStatusMes[index].PVName
 }
 
