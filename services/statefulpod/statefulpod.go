@@ -36,7 +36,7 @@ func (sfp *StatefulPodService) GetName(statefulPod *iapetosapiv1.StatefulPod, in
 
 func (sfp *StatefulPodService) IsExists(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, bool) {
 	var statefulPod iapetosapiv1.StatefulPod
-	if err := sfp.Get(ctx, nameSpaceName, &statefulPod); err != nil {
+	if err := sfp.Client.Get(ctx, nameSpaceName, &statefulPod); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			sfp.Log.Error(err, "get statefulPod error")
 		}
@@ -101,4 +101,8 @@ func (sfp *StatefulPodService) getNewResourceVersion(ctx context.Context, statef
 	}
 	statefulPod.ResourceVersion = newStatefulPod.ResourceVersion
 	return
+}
+
+func (sfp *StatefulPodService) Get(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, error) {
+	return nil, nil
 }

@@ -60,7 +60,7 @@ func (svc *Service) CreateTemplate(ctx context.Context, statefulPod *iapetosapiv
 
 func (svc *Service) IsExists(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, bool) {
 	var service corev1.Service
-	if err := svc.Get(ctx, nameSpaceName, &service); err != nil {
+	if err := svc.Client.Get(ctx, nameSpaceName, &service); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			svc.Log.Error(err, "get svc error")
 		}
@@ -117,4 +117,8 @@ func (svc *Service) Delete(ctx context.Context, obj interface{}) error {
 		return err
 	}
 	return nil
+}
+
+func (svc *Service) Get(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, error) {
+	return nil, nil
 }

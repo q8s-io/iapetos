@@ -151,14 +151,15 @@ func (podctrl *PodCtrl) MaintainPod(ctx context.Context, statefulPod *iapetosapi
 func (podctrl *PodCtrl) PodIsOk(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) *int {
 	podHandler := podservice.NewPodService(podctrl.Client)
 	for i, podMsg := range statefulPod.Status.PodStatusMes {
-		if _, ok := podHandler.IsExists(ctx, types.NamespacedName{
+		if obj, ok := podHandler.IsExists(ctx, types.NamespacedName{
 			Namespace: statefulPod.Namespace,
 			Name:      podMsg.PodName,
 		}); !ok {
 			statefulPod.Status.PodStatusMes[i].Status = Deleting
 			return &i
 		} else {
-			if podMsg.Status == corev1.PodRunning && statefulPod.Status.PodStatusMes[i].Status != corev1.PodRunning {
+			pod := obj.(*corev1.Pod)
+			if pod.Status.Phase == corev1.PodRunning && statefulPod.Status.PodStatusMes[i].Status != corev1.PodRunning {
 				statefulPod.Status.PodStatusMes[i].Status = corev1.PodRunning
 				return &i
 			}

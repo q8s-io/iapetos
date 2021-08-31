@@ -8,13 +8,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
-	podservice "github.com/q8s-io/iapetos/services/pod"
 	pvservice "github.com/q8s-io/iapetos/services/pv"
 )
 
 type PVCtrl struct {
 	client.Client
 }
+
+const redisSlave = "redis-slave"
 
 type PVCtrlFunc interface {
 	SetPVRetain(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) bool
@@ -32,37 +33,28 @@ func (pvctrl *PVCtrl) SetPVRetain(ctx context.Context, statefulPod *iapetosapiv1
 	}
 	sum := 0
 	pvHandle := pvservice.NewPVService(pvctrl.Client)
-	podHandle := podservice.NewPodService(pvctrl.Client)
-	for i, pvcStatus := range statefulPod.Status.PVCStatusMes {
-		if obj, ok := pvHandle.IsExists(ctx, types.NamespacedName{
+	for _, pvcStatus := range statefulPod.Status.PVCStatusMes {
+		if obj, err := pvHandle.Get(ctx, types.NamespacedName{
 			Namespace: corev1.NamespaceAll,
 			Name:      pvcStatus.PVName,
-		}); ok {
-			// redis 若 pod annotations 字段包含redis-slave，跳过，只保留 master 节点对pv
-			objPod, ok := podHandle.IsExists(ctx, types.NamespacedName{
-				Namespace: statefulPod.Namespace,
-				Name:      statefulPod.Status.PodStatusMes[i].PodName,
-			})
-			if !ok {
-				return false
-			}
-			pod := objPod.(*corev1.Pod)
-			if _, ok := pod.Annotations["redis-slave"]; ok {
+		}); err == nil {
+			pv := obj.(*corev1.PersistentVolume)
+			// redis slave ,不设置回收策略
+			if _, ok := pv.Annotations[redisSlave]; ok {
 				sum++
 				continue
 			}
-
-			pv := obj.(*corev1.PersistentVolume)
 			if pv.Spec.PersistentVolumeReclaimPolicy == corev1.PersistentVolumeReclaimRetain {
 				sum++
 				continue
 			}
 			pv.Spec.PersistentVolumeReclaimPolicy = corev1.PersistentVolumeReclaimRetain
 			pv.Spec.StorageClassName = ""
-
 			if _, err := pvHandle.Update(ctx, pv); err != nil {
 				return false
 			}
+		} else if client.IgnoreNotFound(err) == nil { // pv 已被删除
+			sum++
 		}
 	}
 	if sum == len(statefulPod.Status.PVCStatusMes) {
@@ -78,10 +70,10 @@ func (pvctrl *PVCtrl) SetPVAvailable(ctx context.Context, statefulPod *iapetosap
 	sum := 0
 	pvHandle := pvservice.NewPVService(pvctrl.Client)
 	for _, pvcStatus := range statefulPod.Status.PVCStatusMes {
-		if obj, ok := pvHandle.IsExists(ctx, types.NamespacedName{
+		if obj, err := pvHandle.Get(ctx, types.NamespacedName{
 			Namespace: corev1.NamespaceAll,
 			Name:      pvcStatus.PVName,
-		}); ok {
+		}); err == nil {
 			pv := obj.(*corev1.PersistentVolume)
 			if pv.Status.Phase == corev1.VolumeAvailable {
 				sum++
@@ -93,6 +85,9 @@ func (pvctrl *PVCtrl) SetPVAvailable(ctx context.Context, statefulPod *iapetosap
 			if _, err := pvHandle.Update(ctx, pv); err != nil {
 				return false
 			}
+		} else if client.IgnoreNotFound(err) == nil {
+			// delete 策略对pv 已被删除
+			sum++
 		}
 	}
 	if sum == len(statefulPod.Status.PVCStatusMes) {

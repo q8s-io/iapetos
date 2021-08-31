@@ -66,7 +66,7 @@ func (p *PodService) GetName(statefulPod *iapetosapiv1.StatefulPod, index int) *
 }
 func (p *PodService) IsExists(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, bool) {
 	var pod corev1.Pod
-	if err := p.Get(ctx, nameSpaceName, &pod); err != nil {
+	if err := p.Client.Get(ctx, nameSpaceName, &pod); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			p.Log.Error(err, "get pod error")
 		}
@@ -190,4 +190,8 @@ func (p *PodService) setLabels(statefulPod *iapetosapiv1.StatefulPod, pod *corev
 		}
 	}
 	pod.Labels = lables
+}
+
+func (p *PodService) Get(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, error) {
+	return nil, nil
 }

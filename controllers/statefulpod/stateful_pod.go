@@ -46,7 +46,9 @@ func NewStatefulPodCtrl(client client.Client) StatefulPodCtrlFunc {
 func (s *StatefulPodCtrl) CoreCtrl(ctx context.Context, statefulPod *iapetosapiv1.StatefulPod) (ctrl.Result, error) {
 	lenStatus := s.getIndex(statefulPod)
 	lenSpec := int(*statefulPod.Spec.Size)
+	//fmt.Println("-----------lenstatus: ",lenStatus)
 	if !statefulPod.DeletionTimestamp.IsZero() && lenStatus == lenSpec {
+		//	fmt.Println("delete ------")
 		return s.deleteStatefulPod(ctx, statefulPod)
 	}
 
@@ -95,6 +97,7 @@ func (s *StatefulPodCtrl) deleteStatefulPod(ctx context.Context, statefulPod *ia
 			return ctrl.Result{RequeueAfter: WaitTime}, nil
 		}
 		// 删除所有pvc
+		//fmt.Println("----begin delete pvc -------")
 		if !pvcctrl.NewPVCCtrl(s.Client).DeletePvcAll(ctx, statefulPod) {
 			return ctrl.Result{RequeueAfter: WaitTime}, nil
 		}

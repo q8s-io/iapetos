@@ -3,6 +3,7 @@ package pvc_controller
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -62,6 +63,7 @@ func (pvcctrl *PVCCtrl) DeletePvcAll(ctx context.Context, statefulPod *iapetosap
 			Namespace: statefulPod.Namespace,
 			Name:      v.PVCName,
 		}); ok { // pod 存在，删除 pod
+			fmt.Println("-------delete pvc--------")
 			if err := pvcHandler.Delete(ctx, pod); err != nil {
 				return false
 			}

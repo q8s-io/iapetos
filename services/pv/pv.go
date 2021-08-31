@@ -36,7 +36,7 @@ func (pv *PVService) CreateTemplate(ctx context.Context, statefulPod *iapetosapi
 
 func (pv *PVService) IsExists(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, bool) {
 	var pvObj corev1.PersistentVolume
-	if err := pv.Get(ctx, nameSpaceName, &pvObj); err != nil {
+	if err := pv.Client.Get(ctx, nameSpaceName, &pvObj); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			pv.Log.Error(err, "get pv error")
 		}
@@ -84,4 +84,12 @@ func (pv *PVService) Update(ctx context.Context, obj interface{}) (interface{}, 
 
 func (pv *PVService) Delete(ctx context.Context, obj interface{}) error {
 	return nil
+}
+
+func (pv *PVService) Get(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, error) {
+	var pvObj corev1.PersistentVolume
+	if err := pv.Client.Get(ctx, nameSpaceName, &pvObj); err != nil {
+		return nil, err
+	}
+	return &pvObj, nil
 }

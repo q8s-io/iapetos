@@ -24,6 +24,7 @@ type ServiceInf interface {
 	GetName(statefulPod *iapetosapiv1.StatefulPod, index int) *string
 	IsResourceVersionSame(ctx context.Context, obj interface{}) bool
 	DeleteMandatory(ctx context.Context, obj interface{}, statefulPod *iapetosapiv1.StatefulPod) error
+	Get(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, error)
 }
 
 const (

@@ -81,7 +81,7 @@ func (pvc *PVCService) CreateTemplate(ctx context.Context, statefulPod *iapetosa
 
 func (pvc *PVCService) IsExists(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, bool) {
 	var pvcObj corev1.PersistentVolumeClaim
-	if err := pvc.Get(ctx, nameSpaceName, &pvcObj); err != nil {
+	if err := pvc.Client.Get(ctx, nameSpaceName, &pvcObj); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			pvc.Log.Error(err, "get pvc error")
 		}
@@ -138,4 +138,8 @@ func (pvc *PVCService) Delete(ctx context.Context, obj interface{}) error {
 		return err
 	}
 	return nil
+}
+
+func (pvc *PVCService) Get(ctx context.Context, nameSpaceName types.NamespacedName) (interface{}, error) {
+	return nil, nil
 }
