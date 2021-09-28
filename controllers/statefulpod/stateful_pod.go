@@ -10,13 +10,13 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
-	podctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pod_controller"
-	pvctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pv_controller"
-	pvcctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pvc_controller"
-	svcctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/service_controller"
-	"github.com/q8s-io/iapetos/services/statefulpod"
-	"github.com/q8s-io/iapetos/tools"
+	iapetosapiv1 "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/api/v1"
+	podctrl "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers/statefulpod/child_resource_controller/pod_controller"
+	pvctrl "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers/statefulpod/child_resource_controller/pv_controller"
+	pvcctrl "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers/statefulpod/child_resource_controller/pvc_controller"
+	svcctrl "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers/statefulpod/child_resource_controller/service_controller"
+	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/services/statefulpod"
+	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/tools"
 )
 
 const (
@@ -72,7 +72,8 @@ func (s *StatefulPodCtrl) getIndex(statefulPod *iapetosapiv1.StatefulPod) int {
 	if statefulPod.Status.PodStatusMes[index].Status == corev1.PodPhase("CreateTimeOut") {
 		return index
 	}
-	if statefulPod.Status.PodStatusMes[index].Status == corev1.PodPhase("Preparing") {
+	// 只有在扩容时才会 index-1，若是所容不管 pod 是不是 running 状态
+	if statefulPod.Status.PodStatusMes[index].Status == corev1.PodPhase("Preparing") && index<int(*statefulPod.Spec.Size){
 		return index
 	}
 	if statefulPod.Status.PVCStatusMes[index].Status == corev1.ClaimPending {

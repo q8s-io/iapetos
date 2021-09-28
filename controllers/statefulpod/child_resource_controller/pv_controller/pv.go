@@ -7,8 +7,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
-	pvservice "github.com/q8s-io/iapetos/services/pv"
+	iapetosapiv1 "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/api/v1"
+	pvservice "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/services/pv"
 )
 
 type PVCtrl struct {
@@ -75,6 +75,10 @@ func (pvctrl *PVCtrl) SetPVAvailable(ctx context.Context, statefulPod *iapetosap
 			Name:      pvcStatus.PVName,
 		}); err == nil {
 			pv := obj.(*corev1.PersistentVolume)
+			// 等待 从节点的pv被删除
+			if _, ok := pv.Annotations[redisSlave]; ok {
+				break
+			}
 			if pv.Status.Phase == corev1.VolumeAvailable {
 				sum++
 				continue

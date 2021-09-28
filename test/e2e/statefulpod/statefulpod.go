@@ -2,7 +2,7 @@ package statefulpod
 
 import (
 	"github.com/onsi/ginkgo"
-	"github.com/q8s-io/iapetos/test/e2e/testresource"
+	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/test/e2e/testresource"
 )
 
 var TClient *testresource.Client

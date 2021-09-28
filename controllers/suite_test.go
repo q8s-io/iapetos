@@ -30,7 +30,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	iapetosfoundarycloudiov1 "github.com/q8s-io/iapetos/api/v1"
+	iapetosfoundarycloudiov1 "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/api/v1"
 	// +kubebuilder:scaffold:imports
 )
 

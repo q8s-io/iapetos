@@ -9,12 +9,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
-	"github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pvc_controller"
-	resourcecfg "github.com/q8s-io/iapetos/initconfig"
-	"github.com/q8s-io/iapetos/services"
-	podservice "github.com/q8s-io/iapetos/services/pod"
-	pvcservice "github.com/q8s-io/iapetos/services/pvc"
+	iapetosapiv1 "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/api/v1"
+	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers/statefulpod/child_resource_controller/pvc_controller"
+	resourcecfg "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/initconfig"
+	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/services"
+	podservice "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/services/pod"
+	pvcservice "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/services/pvc"
 )
 
 type PodCtrl struct {
@@ -211,7 +211,7 @@ func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapet
 	}
 
 	// pod running
-	if pod.Status.Phase == corev1.PodRunning {
+	if podctrl.isPodRunning(pod) {
 		if statefulPod.Status.PodStatusMes[*index].Status == corev1.PodRunning {
 			return false
 		}
@@ -225,14 +225,16 @@ func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapet
 		if err := podHandler.Delete(ctx, pod); err != nil {
 			return false
 		}
-		if obj, ok := pvcHandler.IsExists(ctx, types.NamespacedName{
-			Namespace: pod.Namespace,
-			Name:      *pvcHandler.GetName(statefulPod, *index),
-		}); ok {
-			pvc := obj.(*corev1.PersistentVolumeClaim)
-		DELETEPVC: // 等待pvc删除完毕，这里不是幂等关系，一次一定要等pvc删除成功
-			if err := pvcHandler.Delete(ctx, pvc); err != nil {
-				goto DELETEPVC
+		if statefulPod.Spec.PVCTemplate!=nil{
+			if obj, ok := pvcHandler.IsExists(ctx, types.NamespacedName{
+				Namespace: pod.Namespace,
+				Name:      *pvcHandler.GetName(statefulPod, *index),
+			}); ok {
+				pvc := obj.(*corev1.PersistentVolumeClaim)
+			DELETEPVC: // 等待pvc删除完毕，这里不是幂等关系，一次一定要等pvc删除成功
+				if err := pvcHandler.Delete(ctx, pvc); err != nil {
+					goto DELETEPVC
+				}
 			}
 		}
 		// 初始化创建时超时
@@ -246,9 +248,22 @@ func (podctrl *PodCtrl) MonitorPodStatus(ctx context.Context, statefulPod *iapet
 		return true
 	}
 	// pod创建超时
-	if pod.Status.Phase != corev1.PodRunning && time.Now().Sub(pod.CreationTimestamp.Time) >= time.Second*time.Duration(resourcecfg.StatefulPodResourceCfg.Pod.Timeout) {
+	if !podctrl.isPodRunning(pod) && time.Now().Sub(pod.CreationTimestamp.Time) >= time.Second*time.Duration(resourcecfg.StatefulPodResourceCfg.Pod.Timeout) {
 		statefulPod.Status.PodStatusMes[*index].Status = CreateTimeOut
 		return true
 	}
 	return false
+}
+
+// pod 内所有的pod都是 running 和 ready 状态
+func (podctrl *PodCtrl)isPodRunning(pod *corev1.Pod)bool{
+	if pod.Status.Phase!=corev1.PodRunning{
+		return false
+	}
+	for _,v:=range pod.Status.Conditions{
+		if v.Type==corev1.PodReady && v.Status!=corev1.ConditionTrue{
+			return false
+		}
+	}
+	return true
 }
