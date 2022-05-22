@@ -11,8 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	iapetosapiv1 "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/api/v1"
-	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/services"
+	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
+	"github.com/q8s-io/iapetos/services"
 )
 
 type PVCService struct {
