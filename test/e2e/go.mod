@@ -1,4 +1,4 @@
-module w.src.corp.qihoo.net/data-platform/infra/iapetos.git/test/e2e
+module github.com/q8s-io/iapetos/test/e2e
 
 go 1.16
 
@@ -12,4 +12,4 @@ require (
 	k8s.io/client-go v0.17.12
 )
 
-replace w.src.corp.qihoo.net/data-platform/infra/iapetos.git => ../../
+replace github.com/q8s-io/iapetos => ../../
