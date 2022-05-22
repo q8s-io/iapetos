@@ -1,4 +1,4 @@
-module w.src.corp.qihoo.net/data-platform/infra/iapetos.git
+module github.com/q8s-io/iapetos
 
 go 1.14
 
@@ -14,4 +14,4 @@ require (
 	sigs.k8s.io/controller-runtime v0.5.0
 )
 
-replace w.src.corp.qihoo.net/data-platform/infra/iapetos.git => ../
+replace github.com/q8s-io/iapetos => ../
