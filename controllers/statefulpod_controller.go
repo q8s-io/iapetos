@@ -28,8 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	iapetosapiv1 "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/api/v1"
-	statefulpodctrl "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers/statefulpod"
+	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
+	statefulpodctrl "github.com/q8s-io/iapetos/controllers/statefulpod"
 )
 
 const (
