@@ -29,8 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	iapetosapiv1 "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/api/v1"
-	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers"
-	_ "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/initconfig"
+	"github.com/q8s-io/iapetos/controllers"
+	_ "github.com/q8s-io/iapetos/initconfig"
 	// +kubebuilder:scaffold:imports
 )
 
