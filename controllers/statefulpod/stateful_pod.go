@@ -10,13 +10,13 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	iapetosapiv1 "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/api/v1"
-	podctrl "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers/statefulpod/child_resource_controller/pod_controller"
-	pvctrl "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers/statefulpod/child_resource_controller/pv_controller"
-	pvcctrl "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers/statefulpod/child_resource_controller/pvc_controller"
-	svcctrl "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers/statefulpod/child_resource_controller/service_controller"
-	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/services/statefulpod"
-	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/tools"
+	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
+	podctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pod_controller"
+	pvctrl "github.com/q8s-io/iapetoscontrollers/statefulpod/child_resource_controller/pv_controller"
+	pvcctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pvc_controller"
+	svcctrl "github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/service_controller"
+	"github.com/q8s-io/iapetos/services/statefulpod"
+	"github.com/q8s-io/iapetos/tools"
 )
 
 const (
