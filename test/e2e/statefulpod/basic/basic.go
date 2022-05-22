@@ -8,8 +8,8 @@ import (
 	"github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 
-	. "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/test/e2e/statefulpod"
-	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/test/e2e/testresource"
+	. "github.com/q8s-io/iapetos/test/e2e/statefulpod"
+	"github.com/q8s-io/iapetos/test/e2e/testresource"
 )
 
 var _ = ginkgo.Describe("statefulPod resource test", func() {
