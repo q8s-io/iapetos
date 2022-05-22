@@ -46,17 +46,17 @@
     ```console
    #断开前查看pod所在节点
    $ kubectl get pod -n ldy -o wide
-   NAME                READY   STATUS    RESTARTS   AGE   IP              NODE                          NOMINATED NODE   READINESS GATES
-   test-statefulpod0   1/1     Running   0          29s   10.217.5.102    p47664v.hulk.shbt.qihoo.net   <none>           <none>
-   test-statefulpod1   1/1     Running   0          26s   10.217.13.193   p47656v.hulk.shbt.qihoo.net   <none>           <none>
-   test-statefulpod2   1/1     Running   0          24s   10.217.5.201    p47664v.hulk.shbt.qihoo.net   <none>           <none>
-   test-statefulpod3   1/1     Running   0          21s   10.217.13.93    p47656v.hulk.shbt.qihoo.net   <none>           <none>
+   NAME                READY   STATUS    RESTARTS   AGE   IP         NODE    NOMINATED NODE   READINESS GATES
+   test-statefulpod0   1/1     Running   0          29s   1.1.1.1    node1   <none>           <none>
+   test-statefulpod1   1/1     Running   0          26s   1.1.1.1    node1   <none>           <none>
+   test-statefulpod2   1/1     Running   0          24s   1.1.1.1    node1   <none>           <none>
+   test-statefulpod3   1/1     Running   0          21s   1.1.1.1    node1   <none>           <none>
     
    #运行脚本后(请等待2分钟左右)
-   NAME                READY   STATUS    RESTARTS   AGE    IP              NODE                          NOMINATED NODE   READINESS GATES
-   test-statefulpod0   1/1     Running   0          21s    10.217.13.245   p47656v.hulk.shbt.qihoo.net   <none>           <none>
-   test-statefulpod1   1/1     Running   0          118s   10.217.13.193   p47656v.hulk.shbt.qihoo.net   <none>           <none>
-   test-statefulpod2   1/1     Running   0          20s    10.217.13.124   p47656v.hulk.shbt.qihoo.net   <none>           <none>
-   test-statefulpod3   1/1     Running   0          113s   10.217.13.93    p47656v.hulk.shbt.qihoo.net   <none>           <none>
+   NAME                READY   STATUS    RESTARTS   AGE    IP        NODE    NOMINATED NODE   READINESS GATES
+   test-statefulpod0   1/1     Running   0          21s    1.1.1.1   node1   <none>           <none>
+   test-statefulpod1   1/1     Running   0          118s   1.1.1.1   node1   <none>           <none>
+   test-statefulpod2   1/1     Running   0          20s    1.1.1.1   node1   <none>           <none>
+   test-statefulpod3   1/1     Running   0          113s   1.1.1.1   node1   <none>           <none>
     ```
  
