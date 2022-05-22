@@ -9,12 +9,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	iapetosapiv1 "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/api/v1"
-	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/controllers/statefulpod/child_resource_controller/pvc_controller"
-	resourcecfg "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/initconfig"
-	"w.src.corp.qihoo.net/data-platform/infra/iapetos.git/services"
-	podservice "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/services/pod"
-	pvcservice "w.src.corp.qihoo.net/data-platform/infra/iapetos.git/services/pvc"
+	iapetosapiv1 "github.com/q8s-io/iapetos/api/v1"
+	"github.com/q8s-io/iapetos/controllers/statefulpod/child_resource_controller/pvc_controller"
+	resourcecfg "github.com/q8s-io/iapetos/initconfig"
+	"github.com/q8s-io/iapetos/services"
+	podservice "github.com/q8s-io/iapetos/services/pod"
+	pvcservice "github.com/q8s-io/iapetos/services/pvc"
 )
 
 type PodCtrl struct {
